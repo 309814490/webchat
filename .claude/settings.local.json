@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose up -d)",
+      "Bash(docker compose up -d)",
+      "Bash(mvn clean compile)",
+      "Bash(npm run build)",
+      "Bash(taskkill //F //PID 31568)",
+      "Bash(taskkill //F //PID 18120)",
+      "Bash(npm run dev)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 6872)",
+      "Bash(mvn spring-boot:run)",
+      "Bash(curl -s -o haode.gif \"http://img.soogif.com/MKtbSVREcZ7OsMmzD7b9i9JHnVdZPUKN.gif\" -w \"%{http_code} %{size_download}\")",
+      "Bash(curl -s -o jiayou.gif \"http://img.soogif.com/AnAlOHsX01RYKEKiwIapGI5EJlWlGt6D.gif\" -w \"%{http_code} %{size_download}\")",
+      "Bash(curl -s -o hahaha.gif \"http://img.soogif.com/AOHgXyupKR7Cqfvm3rASULE2nXPl2BrT.gif\" -w \"%{http_code} %{size_download}\")",
+      "Bash(curl -s -o zaijian.gif \"http://img.soogif.com/HOLb3l8NF9gVX24iZHUvCpwjY1MIkDhj.gif\" -w \"%{http_code} %{size_download}\")",
+      "Bash(curl -s -o shengqi.gif \"http://img.soogif.com/7VCkgmujNKUGT767llVpIFn85weOr1no.gif\" -w \"%{http_code} %{size_download}\")",
+      "Bash(curl -s -o nanguo.gif \"http://img.soogif.com/6D5eMu9iE0K3GGZFdQMng9J7ebzGo3m8.gif\" -w \"%{http_code} %{size_download}\")",
+      "Bash(curl -s -o dianzan.gif \"http://img.soogif.com/9R5oJwXzBjdkJoCtuwqWjjAKX3NcpbTk.gif\" -w \"%{http_code} %{size_download}\")",
+      "Bash(curl -s -o baobao.gif \"http://img.soogif.com/50Kue7VtRc4FhklrRVA9fd57chOEfNzN.gif\" -w \"%{http_code} %{size_download}\")",
+      "Bash(curl -s -o wanan.gif \"http://img.soogif.com/Ll2NwBBGEM9TVd2qk8nXo3buiTum1I2J.gif\" -w \"%{http_code} %{size_download}\")"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>清除缓存</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>清除浏览器缓存</h1>
+    <button onclick="clearStorage()">点击清除缓存</button>
+    <p id="result"></p>
+
+    <script>
+        function clearStorage() {
+            localStorage.clear();
+            sessionStorage.clear();
+            document.getElementById('result').innerHTML = '✅ 缓存已清除！请关闭此页面，重新打开应用并登录。';
+        }
+    </script>
+</body>
+</html>

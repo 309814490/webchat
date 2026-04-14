@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: webchat
+
+  datasource:
+    url: jdbc:mysql://10.204.56.4:3306/webchat?rewriteBatchedStatements=true&characterEncoding=UTF-8&useOldAliasMetadataBehavior=true
+    username: root
+    password: kMwJkX_488af
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+server:
+  port: 8080
+
+# JWT 配置
+jwt:
+  secret: your-super-secret-jwt-key-change-this-in-production-must-be-at-least-256-bits
+  expiration: 604800000  # 7 days in milliseconds
+
+# CORS 配置
+cors:
+  allowed-origins: http://localhost:1420,http://localhost:5173
+  allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+  allowed-headers: "*"
+  allow-credentials: true
