@@ -262,7 +262,7 @@ export default function ChatHistory({ conversationId, isGroup, onClose }: ChatHi
           <Calendar className="w-4 h-4" />日期
         </button>
         {isGroup && (
-          <button onClick={() => setShowMemberPicker(true)} className="text-base text-blue-600 hover:text-blue-800 flex items-center gap-1">
+          <button onClick={() => { setShowMemberPicker(true); setShowDatePicker(false); }} className="text-base text-blue-600 hover:text-blue-800 flex items-center gap-1">
             <Users className="w-4 h-4" />群成员
           </button>
         )}
