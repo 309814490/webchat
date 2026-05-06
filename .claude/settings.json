@@ -1,7 +1,33 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mvn compile -q)"
+      "Bash(npm *)",
+      "Bash(node *)",
+      "Bash(cd *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(mkdir *)",
+      "Bash(rm *)",
+      "Bash(mv *)",
+      "Bash(curl *)",
+      "Bash(tar *)",
+      "Bash(sleep *)",
+      "Bash(kill *)",
+      "Bash(tasklist *)",
+      "Bash(powershell.exe *)",
+      "Bash(tail *)",
+      "Bash(head *)",
+      "Bash(echo *)",
+      "Bash(git *)",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "TodoWrite",
+      "WebSearch",
+      "WebFetch",
+      "Task"
     ]
   }
 }

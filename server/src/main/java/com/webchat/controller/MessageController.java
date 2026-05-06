@@ -2,6 +2,7 @@ package com.webchat.controller;
 
 import com.webchat.dto.MessageDTO;
 import com.webchat.dto.SendMessageRequest;
+import com.webchat.entity.Message;
 import com.webchat.service.MessageService;
 import com.webchat.util.PermissionValidator;
 import jakarta.validation.Valid;
@@ -11,6 +12,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -51,6 +56,88 @@ public class MessageController {
             // 验证用户是否是会话成员
             permissionValidator.validateConversationMember(userId, conversationId);
             Page<MessageDTO> messages = messageService.getMessages(conversationId, page, size);
+            return ResponseEntity.ok(messages);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/conversation/{conversationId}/search")
+    public ResponseEntity<?> searchMessages(
+            @PathVariable Long conversationId,
+            @RequestParam String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        try {
+            Long userId = (Long) authentication.getPrincipal();
+            permissionValidator.validateConversationMember(userId, conversationId);
+            Page<MessageDTO> messages = messageService.searchMessages(conversationId, keyword, page, size);
+            return ResponseEntity.ok(messages);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/conversation/{conversationId}/search/type")
+    public ResponseEntity<?> searchByType(
+            @PathVariable Long conversationId,
+            @RequestParam List<String> types,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        try {
+            Long userId = (Long) authentication.getPrincipal();
+            permissionValidator.validateConversationMember(userId, conversationId);
+            List<Message.MessageType> messageTypes = types.stream()
+                    .map(t -> Message.MessageType.valueOf(t.toUpperCase()))
+                    .toList();
+            Page<MessageDTO> messages = messageService.searchByType(conversationId, messageTypes, page, size);
+            return ResponseEntity.ok(messages);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/conversation/{conversationId}/search/date")
+    public ResponseEntity<?> searchByDate(
+            @PathVariable Long conversationId,
+            @RequestParam String startDate,
+            @RequestParam String endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        try {
+            Long userId = (Long) authentication.getPrincipal();
+            permissionValidator.validateConversationMember(userId, conversationId);
+            LocalDateTime start = LocalDate.parse(startDate).atStartOfDay();
+            LocalDateTime end = LocalDate.parse(endDate).atTime(LocalTime.MAX);
+            Page<MessageDTO> messages = messageService.searchByDateRange(conversationId, start, end, page, size);
+            return ResponseEntity.ok(messages);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/conversation/{conversationId}/search/sender")
+    public ResponseEntity<?> searchBySender(
+            @PathVariable Long conversationId,
+            @RequestParam Long senderId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        try {
+            Long userId = (Long) authentication.getPrincipal();
+            permissionValidator.validateConversationMember(userId, conversationId);
+            Page<MessageDTO> messages = messageService.searchBySender(conversationId, senderId, page, size);
             return ResponseEntity.ok(messages);
         } catch (SecurityException e) {
             return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));

@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Search, Bell, Users, MessageSquare } from 'lucide-react';
 import FriendRequests from './FriendRequests';
-import ChatWindow from './ChatWindow';
 import GroupList from './GroupList';
 import { friendApi, UserInfo } from '../services/api';
 
-export default function Contacts() {
+interface Props {
+  onOpenChat?: (friend: { id: string; username: string; studentId: string | null; avatarUrl: string | null }) => void;
+}
+
+export default function Contacts({ onOpenChat }: Props) {
   const [showFriendRequests, setShowFriendRequests] = useState(false);
   const [showGroupList, setShowGroupList] = useState(false);
   const [friends, setFriends] = useState<UserInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedFriend, setSelectedFriend] = useState<UserInfo | null>(null);
 
   useEffect(() => {
     loadFriends();
@@ -88,7 +90,7 @@ export default function Contacts() {
               {contacts.map((contact) => (
                 <div
                   key={contact.id}
-                  onClick={() => setSelectedFriend(contact)}
+                  onClick={() => onOpenChat?.({ id: contact.id, username: contact.username, studentId: contact.studentId, avatarUrl: contact.avatarUrl })}
                   className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
                 >
                   <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
@@ -107,7 +109,6 @@ export default function Contacts() {
 
       {showFriendRequests && <FriendRequests onClose={() => setShowFriendRequests(false)} />}
       {showGroupList && <GroupList onClose={() => setShowGroupList(false)} />}
-      {selectedFriend && <ChatWindow friend={selectedFriend} onClose={() => setSelectedFriend(null)} />}
     </div>
   );
 }

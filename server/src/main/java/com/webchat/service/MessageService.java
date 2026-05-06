@@ -140,6 +140,111 @@ public class MessageService {
         return messagePage.map(message -> convertToDTO(message, replySenderMap, memberRoleMap, replyMessageMap));
     }
 
+    public Page<MessageDTO> searchMessages(Long conversationId, String keyword, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Message> messagePage = messageRepository.searchMessages(conversationId, keyword, pageable);
+
+        var senderIds = messagePage.getContent().stream()
+                .map(Message::getSenderId)
+                .distinct()
+                .toList();
+
+        var senderMap = userRepository.findAllById(senderIds).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    user -> user.getId(),
+                    user -> user
+                ));
+
+        var memberRoleMap = conversationMemberRepository.findByConversationId(conversationId).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    member -> member.getUserId(),
+                    member -> member.getRole().name()
+                ));
+
+        var replyToIds = messagePage.getContent().stream()
+                .map(Message::getReplyToId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+
+        var replyMessageMap = replyToIds.isEmpty()
+                ? java.util.Collections.<Long, Message>emptyMap()
+                : messageRepository.findAllById(replyToIds).stream()
+                    .collect(java.util.stream.Collectors.toMap(Message::getId, m -> m));
+
+        var replySenderIds = replyMessageMap.values().stream()
+                .map(Message::getSenderId)
+                .filter(id -> !senderMap.containsKey(id))
+                .distinct()
+                .toList();
+        var replySenderMap = new java.util.HashMap<>(senderMap);
+        if (!replySenderIds.isEmpty()) {
+            userRepository.findAllById(replySenderIds).forEach(user -> replySenderMap.put(user.getId(), user));
+        }
+
+        return messagePage.map(message -> convertToDTO(message, replySenderMap, memberRoleMap, replyMessageMap));
+    }
+
+    public Page<MessageDTO> searchByType(Long conversationId, List<Message.MessageType> types, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Message> messagePage = messageRepository.findByConversationIdAndTypeIn(conversationId, types, pageable);
+        return convertPageToDTO(conversationId, messagePage);
+    }
+
+    public Page<MessageDTO> searchByDateRange(Long conversationId, java.time.LocalDateTime startDate, java.time.LocalDateTime endDate, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Message> messagePage = messageRepository.findByConversationIdAndDateRange(conversationId, startDate, endDate, pageable);
+        return convertPageToDTO(conversationId, messagePage);
+    }
+
+    public Page<MessageDTO> searchBySender(Long conversationId, Long senderId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Message> messagePage = messageRepository.findByConversationIdAndSenderId(conversationId, senderId, pageable);
+        return convertPageToDTO(conversationId, messagePage);
+    }
+
+    private Page<MessageDTO> convertPageToDTO(Long conversationId, Page<Message> messagePage) {
+        var senderIds = messagePage.getContent().stream()
+                .map(Message::getSenderId)
+                .distinct()
+                .toList();
+
+        var senderMap = userRepository.findAllById(senderIds).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    user -> user.getId(),
+                    user -> user
+                ));
+
+        var memberRoleMap = conversationMemberRepository.findByConversationId(conversationId).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    member -> member.getUserId(),
+                    member -> member.getRole().name()
+                ));
+
+        var replyToIds = messagePage.getContent().stream()
+                .map(Message::getReplyToId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+
+        var replyMessageMap = replyToIds.isEmpty()
+                ? java.util.Collections.<Long, Message>emptyMap()
+                : messageRepository.findAllById(replyToIds).stream()
+                    .collect(java.util.stream.Collectors.toMap(Message::getId, m -> m));
+
+        var replySenderIds = replyMessageMap.values().stream()
+                .map(Message::getSenderId)
+                .filter(id -> !senderMap.containsKey(id))
+                .distinct()
+                .toList();
+        var replySenderMap = new java.util.HashMap<>(senderMap);
+        if (!replySenderIds.isEmpty()) {
+            userRepository.findAllById(replySenderIds).forEach(user -> replySenderMap.put(user.getId(), user));
+        }
+
+        return messagePage.map(message -> convertToDTO(message, replySenderMap, memberRoleMap, replyMessageMap));
+    }
+
     private MessageDTO convertToDTO(Message message) {
         MessageDTO dto = new MessageDTO();
         dto.setId(message.getId());

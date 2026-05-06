@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Users } from 'lucide-react';
 import AddFriend from './AddFriend';
 import CreateGroup from './CreateGroup';
 import SearchFriends from './SearchFriends';
 import { conversationApi, ConversationInfo } from '../services/api';
 
-export default function Messages() {
-  const navigate = useNavigate();
+interface Props {
+  onOpenChat?: (conv: ConversationInfo) => void;
+  nameUpdates?: Record<number, string>;
+}
+
+export default function Messages({ onOpenChat, nameUpdates }: Props) {
   const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'mention'>('all');
   const [showMenu, setShowMenu] = useState(false);
   const [showAddFriend, setShowAddFriend] = useState(false);
@@ -61,7 +64,6 @@ export default function Messages() {
     if (conv.unreadCount > 0) {
       try {
         await conversationApi.markAsRead(conv.id);
-        // 立即更新本地状态，清除未读数量
         setConversations(prevConvs =>
           prevConvs.map(c => c.id === conv.id ? { ...c, unreadCount: 0 } : c)
         );
@@ -70,34 +72,37 @@ export default function Messages() {
       }
     }
 
-    // 跳转到聊天页面
-    const type = conv.type === 'PRIVATE' ? 'private' : 'group';
-    navigate(`/chat/${type}/${conv.id}`);
+    if (onOpenChat) {
+      onOpenChat(conv);
+    }
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
-      {/* Header */}
-      <div className="bg-white px-4 py-3 shadow-sm">
-        <div className="flex items-center justify-between">
-          <button className="p-2" onClick={() => setShowSearch(true)}>
-            <Search className="w-5 h-5 text-gray-600" />
-          </button>
-          <h1 className="text-lg font-semibold text-gray-800">消息</h1>
+    <div className="flex flex-col h-full bg-[#ebebeb]">
+      {/* 搜索栏 + 操作按钮 */}
+      <div className="bg-[#ebebeb] px-4 pt-5 pb-3">
+        <div className="flex items-center gap-3">
+          <div
+            className="flex-1 flex items-center bg-white rounded px-3 py-2 cursor-text"
+            onClick={() => setShowSearch(true)}
+          >
+            <Search className="w-[18px] h-[18px] text-gray-400 shrink-0" />
+            <span className="ml-2 text-[15px] text-gray-400 select-none">搜索</span>
+          </div>
           <div className="relative">
             <button
-              className="p-2"
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-black/5 transition-colors"
               onClick={() => setShowMenu(!showMenu)}
             >
-              <Plus className="w-5 h-5 text-gray-600" />
+              <Plus className="w-[22px] h-[22px] text-gray-600" />
             </button>
             {showMenu && (
-              <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-10">
+              <div className="absolute right-0 mt-2 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
                 <button
                   onClick={() => { loadConversations(); setShowMenu(false); }}
                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
                 >
-                  更新消息
+                  刷新消息
                 </button>
                 <button
                   onClick={() => { setShowAddFriend(true); setShowMenu(false); }}
@@ -111,39 +116,10 @@ export default function Messages() {
                 >
                   创建群聊
                 </button>
-                <button className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50">扫一扫</button>
               </div>
             )}
           </div>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="bg-white px-4 py-2 flex gap-6 border-b border-gray-200">
-        <button
-          onClick={() => setActiveTab('all')}
-          className={`pb-2 text-sm font-medium ${
-            activeTab === 'all' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'
-          }`}
-        >
-          所有
-        </button>
-        <button
-          onClick={() => setActiveTab('unread')}
-          className={`pb-2 text-sm font-medium ${
-            activeTab === 'unread' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'
-          }`}
-        >
-          未读
-        </button>
-        <button
-          onClick={() => setActiveTab('mention')}
-          className={`pb-2 text-sm font-medium ${
-            activeTab === 'mention' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'
-          }`}
-        >
-          @我
-        </button>
       </div>
 
       {/* Message List */}
@@ -163,36 +139,36 @@ export default function Messages() {
           filteredConversations.map((conv) => (
             <div
               key={conv.id}
-              className="bg-white border-b border-gray-100 px-4 py-3 hover:bg-gray-50 cursor-pointer"
+              className="bg-white border-b border-gray-100 px-3 py-3 hover:bg-gray-50 cursor-pointer"
               onClick={() => handleConversationClick(conv)}
             >
               <div className="flex items-center gap-3">
                 {conv.type === 'GROUP' ? (
                   conv.avatarUrl ? (
-                    <img src={conv.avatarUrl} alt={conv.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                    <img src={conv.avatarUrl} alt={conv.name} className="w-11 h-11 rounded object-cover shrink-0" />
                   ) : (
-                    <div className="w-12 h-12 rounded-lg bg-green-500 flex items-center justify-center text-white shrink-0">
+                    <div className="w-11 h-11 rounded bg-gray-400 flex items-center justify-center text-white shrink-0">
                       <Users className="w-6 h-6" />
                     </div>
                   )
                 ) : (
                   conv.avatarUrl ? (
-                    <img src={conv.avatarUrl} alt={conv.name} className="w-12 h-12 rounded-full object-cover shrink-0" />
+                    <img src={conv.avatarUrl} alt={conv.name} className="w-11 h-11 rounded object-cover shrink-0" />
                   ) : (
-                    <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0">
+                    <div className="w-11 h-11 rounded bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0">
                       <span className="text-sm">{conv.otherStudentId || '?'}</span>
                     </div>
                   )
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-gray-900">{conv.name || '未命名'}</span>
-                    <span className="text-xs text-gray-500">{formatTime(conv.lastMessageTime)}</span>
+                    <span className="font-normal text-[15px] text-gray-900">{nameUpdates?.[conv.id] || conv.name || '未命名'}</span>
+                    <span className="text-xs text-gray-400">{formatTime(conv.lastMessageTime)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-gray-600 truncate">{conv.lastMessage || '暂无消息'}</p>
+                    <p className="text-[13px] text-gray-500 truncate">{conv.lastMessage || '暂无消息'}</p>
                     {conv.unreadCount > 0 && (
-                      <span className="ml-2 bg-red-500 text-white text-xs rounded-full px-2 py-0.5 shrink-0">
+                      <span className="ml-2 bg-red-500 text-white text-[11px] rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shrink-0">
                         {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
                       </span>
                     )}

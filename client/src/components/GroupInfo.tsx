@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, ChevronRight, Plus, Minus, Users } from 'lucide-react';
 import { groupApi, friendApi, UserInfo } from '../services/api';
+import GroupQRCode from './GroupQRCode';
 
 interface GroupInfoProps {
   conversationId: number;
@@ -11,6 +12,7 @@ interface GroupInfoProps {
   currentUserRole: string;
   onClose: () => void;
   onMembersUpdated: () => void;
+  onGroupNameUpdated?: (newName: string) => void;
 }
 
 export default function GroupInfo({
@@ -22,6 +24,7 @@ export default function GroupInfo({
   currentUserRole,
   onClose,
   onMembersUpdated,
+  onGroupNameUpdated,
 }: GroupInfoProps) {
   const [showAllMembers, setShowAllMembers] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -35,6 +38,7 @@ export default function GroupInfo({
   const [showAddMember, setShowAddMember] = useState(false);
   const [removingMode, setRemovingMode] = useState(false);
   const [showGroupManagement, setShowGroupManagement] = useState(false);
+  const [showQRCode, setShowQRCode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [friends, setFriends] = useState<UserInfo[]>([]);
   const [selectedFriends, setSelectedFriends] = useState<Set<number>>(new Set());
@@ -67,6 +71,7 @@ export default function GroupInfo({
     try {
       await groupApi.updateGroupName(conversationId, newGroupName.trim());
       setEditingName(false);
+      onGroupNameUpdated?.(newGroupName.trim());
       onMembersUpdated();
     } catch (error: any) {
       alert('修改群名失败: ' + (error.response?.data?.message || error.message));
@@ -159,10 +164,15 @@ export default function GroupInfo({
     }
   };
 
+  // QR Code modal
+  if (showQRCode) {
+    return <GroupQRCode conversationId={conversationId} groupName={groupName} onClose={() => setShowQRCode(false)} />;
+  }
+
   // Add member modal
   if (showAddMember) {
     return (
-      <div className="fixed inset-0 bg-white z-[60] flex flex-col">
+      <div className="flex flex-col h-full bg-gray-50">
         <div className="bg-white px-4 py-3 shadow-sm flex items-center justify-between">
           <button onClick={() => { setShowAddMember(false); setSelectedFriends(new Set()); }} className="p-2 hover:bg-gray-100 rounded-full">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -217,7 +227,7 @@ export default function GroupInfo({
   // Group management page (owner only)
   if (showGroupManagement) {
     return (
-      <div className="fixed inset-0 bg-white z-[60] flex flex-col">
+      <div className="flex flex-col h-full bg-gray-50">
         <div className="bg-white px-4 py-3 shadow-sm flex items-center justify-between">
           <button onClick={() => setShowGroupManagement(false)} className="p-2 hover:bg-gray-100 rounded-full">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -296,7 +306,7 @@ export default function GroupInfo({
   // Editing name modal
   if (editingName) {
     return (
-      <div className="fixed inset-0 bg-white z-[60] flex flex-col">
+      <div className="flex flex-col h-full bg-gray-50">
         <div className="bg-white px-4 py-3 shadow-sm flex items-center justify-between">
           <button onClick={() => { setEditingName(false); setNewGroupName(groupName); }} className="p-2 hover:bg-gray-100 rounded-full">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -325,7 +335,7 @@ export default function GroupInfo({
   // Editing announcement modal
   if (editingAnnouncement) {
     return (
-      <div className="fixed inset-0 bg-white z-[60] flex flex-col">
+      <div className="flex flex-col h-full bg-gray-50">
         <div className="bg-white px-4 py-3 shadow-sm flex items-center justify-between">
           <button onClick={() => { setEditingAnnouncement(false); setNewAnnouncement(announcement); }} className="p-2 hover:bg-gray-100 rounded-full">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -360,7 +370,7 @@ export default function GroupInfo({
   // Editing remark modal
   if (editingRemark) {
     return (
-      <div className="fixed inset-0 bg-white z-[60] flex flex-col">
+      <div className="flex flex-col h-full bg-gray-50">
         <div className="bg-white px-4 py-3 shadow-sm flex items-center justify-between">
           <button onClick={() => { setEditingRemark(false); setNewRemark(remark); }} className="p-2 hover:bg-gray-100 rounded-full">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -386,14 +396,14 @@ export default function GroupInfo({
 
   // Main group info page
   return (
-    <div className="fixed inset-0 bg-gray-50 z-[55] flex flex-col">
+    <div className="flex flex-col h-full bg-gray-50">
       {/* Header */}
       <div className="bg-white px-4 py-3 shadow-sm flex items-center justify-between">
         <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
         <p className="text-lg font-semibold text-gray-900">
-          聊天信息({memberCount})
+          群管理({memberCount})
         </p>
         <div className="w-9" />
       </div>
@@ -498,7 +508,10 @@ export default function GroupInfo({
           </div>
 
           {/* Group QR code */}
-          <div className="px-4 py-3.5 flex items-center justify-between border-b border-gray-100 cursor-pointer active:bg-gray-50">
+          <div
+            className="px-4 py-3.5 flex items-center justify-between border-b border-gray-100 cursor-pointer active:bg-gray-50"
+            onClick={() => setShowQRCode(true)}
+          >
             <span className="text-sm text-gray-700">群二维码</span>
             <div className="flex items-center gap-1">
               <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -512,48 +525,16 @@ export default function GroupInfo({
             </div>
           </div>
 
-          {/* Group announcement */}
-          <div
-            className="px-4 py-3.5 flex items-center justify-between border-b border-gray-100 cursor-pointer active:bg-gray-50"
-            onClick={() => { setNewAnnouncement(announcement); setEditingAnnouncement(true); }}
-          >
-            <span className="text-sm text-gray-700">群公告</span>
-            <div className="flex items-center gap-1 flex-1 justify-end min-w-0 ml-4">
-              <span className="text-sm text-gray-400 truncate max-w-[200px]">
-                {announcement || '未设置'}
-              </span>
-              <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
-            </div>
-          </div>
-
           {/* Group management (admin/owner only) */}
           {isAdmin && (
             <div
-              className="px-4 py-3.5 flex items-center justify-between border-b border-gray-100 cursor-pointer active:bg-gray-50"
+              className="px-4 py-3.5 flex items-center justify-between cursor-pointer active:bg-gray-50"
               onClick={() => setShowGroupManagement(true)}
             >
               <span className="text-sm text-gray-700">群管理</span>
               <ChevronRight className="w-4 h-4 text-gray-400" />
             </div>
           )}
-
-          {/* Remark */}
-          <div
-            className="px-4 py-3.5 flex items-center justify-between border-b border-gray-100 cursor-pointer active:bg-gray-50"
-            onClick={() => { setNewRemark(remark); setEditingRemark(true); }}
-          >
-            <span className="text-sm text-gray-700">备注</span>
-            <div className="flex items-center gap-1">
-              <span className="text-sm text-gray-400 max-w-[200px] truncate">{remark || '无'}</span>
-              <ChevronRight className="w-4 h-4 text-gray-400" />
-            </div>
-          </div>
-
-          {/* Search chat history */}
-          <div className="px-4 py-3.5 flex items-center justify-between cursor-pointer active:bg-gray-50">
-            <span className="text-sm text-gray-700">查找聊天记录</span>
-            <ChevronRight className="w-4 h-4 text-gray-400" />
-          </div>
         </div>
 
         {/* Bottom padding */}

@@ -6,51 +6,133 @@ interface EmojiPickerProps {
 }
 
 export default function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
-  const [activeCategory, setActiveCategory] = useState<'recent' | 'smile' | 'gesture' | 'object'>('smile');
+  const [activeCategory, setActiveCategory] = useState<string>('smile');
 
-  // 常用表情包分类
-  const emojiCategories = {
-    recent: {
-      label: '最近',
-      emojis: ['😊', '👍', '❤️', '😂', '🎉', '👏', '🙏', '💪']
-    },
+  const emojiCategories: Record<string, { label: string; icon: string; emojis: string[] }> = {
     smile: {
-      label: '笑脸',
+      label: '表情',
+      icon: '😊',
       emojis: [
         '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂',
         '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩',
-        '😘', '😗', '😚', '😙', '😋', '😛', '😜', '🤪',
-        '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨',
-        '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥',
-        '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕'
+        '😘', '😗', '😚', '😙', '🥲', '😋', '😛', '😜',
+        '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐',
+        '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬',
+        '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒',
+        '🤕', '🤢', '🤮', '🥵', '🥶', '🥴', '😵', '🤯',
+        '🤠', '🥳', '🥸', '😎', '🤓', '🧐', '😕', '😟',
+        '🙁', '☹️', '😮', '😯', '😲', '😳', '🥺', '😦',
+        '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖',
+        '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡',
+        '😠', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡',
+        '👹', '👺', '👻', '👽', '👾', '🤖', '🎃', '😺',
+        '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'
       ]
     },
     gesture: {
       label: '手势',
+      icon: '👋',
       emojis: [
-        '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤏', '✌️',
-        '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕',
-        '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜',
-        '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💪'
+        '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏',
+        '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆',
+        '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛',
+        '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️',
+        '💅', '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂',
+        '🦻', '👃', '👀', '👁️', '👅', '👄', '💋', '🫀',
+        '🫁', '🧠', '🦷', '🦴', '👶', '🧒', '👦', '👧'
       ]
     },
-    object: {
-      label: '物品',
+    animal: {
+      label: '动物',
+      icon: '🐶',
+      emojis: [
+        '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼',
+        '🐻‍❄️', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵',
+        '🙈', '🙉', '🙊', '🐒', '🐔', '🐧', '🐦', '🐤',
+        '🐣', '🐥', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗',
+        '🐴', '🦄', '🐝', '🪱', '🐛', '🦋', '🐌', '🐞',
+        '🐜', '🪰', '🪲', '🪳', '🦟', '🦗', '🕷️', '🦂',
+        '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐',
+        '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋'
+      ]
+    },
+    food: {
+      label: '食物',
+      icon: '🍔',
+      emojis: [
+        '🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇',
+        '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥',
+        '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️',
+        '🫑', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🥐',
+        '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈',
+        '🥞', '🧇', '🥓', '🥩', '🍗', '🍖', '🦴', '🌭',
+        '🍔', '🍟', '🍕', '🫓', '🥪', '🥙', '🧆', '🌮',
+        '🌯', '🫔', '🥗', '🥘', '🫕', '🍝', '🍜', '🍲'
+      ]
+    },
+    travel: {
+      label: '旅行',
+      icon: '🚗',
+      emojis: [
+        '🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑',
+        '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🏍️', '🛵',
+        '🚲', '🛴', '🛹', '🛼', '🚁', '✈️', '🛩️', '🚀',
+        '🛸', '🚢', '⛵', '🚤', '🛥️', '⛴️', '🏠', '🏡',
+        '🏢', '🏣', '🏤', '🏥', '🏦', '🏨', '🏩', '🏪',
+        '🏫', '🏬', '🏭', '🏯', '🏰', '💒', '🗼', '🗽',
+        '⛪', '🕌', '🛕', '🕍', '⛩️', '🕋', '⛲', '⛺',
+        '🌁', '🌃', '🏙️', '🌄', '🌅', '🌆', '🌇', '🌉'
+      ]
+    },
+    activity: {
+      label: '活动',
+      icon: '⚽',
+      emojis: [
+        '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉',
+        '🥏', '🎱', '🪀', '🏓', '🏸', '🏒', '🏑', '🥍',
+        '🏏', '🪃', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿',
+        '🥊', '🥋', '🎽', '🛹', '🛼', '🛷', '⛸️', '🥌',
+        '🎿', '⛷️', '🏂', '🪂', '🏋️', '🤸', '🤺', '⛹️',
+        '🤾', '🏌️', '🏇', '🧘', '🏄', '🏊', '🤽', '🚣',
+        '🧗', '🚵', '🚴', '🏆', '🥇', '🥈', '🥉', '🏅',
+        '🎖️', '🏵️', '🎗️', '🎪', '🎭', '🎨', '🎬', '🎤'
+      ]
+    },
+    heart: {
+      label: '爱心',
+      icon: '❤️',
       emojis: [
         '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍',
-        '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘',
-        '💝', '💟', '☮️', '✝️', '☪️', '🕉️', '☸️', '✡️',
-        '🔯', '🕎', '☯️', '☦️', '🛐', '⛎', '♈', '♉'
+        '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖',
+        '💘', '💝', '💟', '♥️', '🫶', '💑', '💏', '👨‍❤️‍👨',
+        '👩‍❤️‍👩', '💐', '🌹', '🥀', '🌺', '🌸', '🌼', '🌻',
+        '🌷', '💮', '🏵️', '🎁', '🎀', '🎊', '🎉', '🎈',
+        '✨', '🌟', '⭐', '🔥', '💫', '💥', '💢', '💦',
+        '💨', '🕊️', '🌈', '☀️', '🌤️', '⛅', '🌥️', '☁️',
+        '🌦️', '🌧️', '⛈️', '🌩️', '🌪️', '🌫️', '🌬️', '🌀'
+      ]
+    },
+    symbol: {
+      label: '符号',
+      icon: '🔣',
+      emojis: [
+        '✅', '❌', '❓', '❗', '‼️', '⁉️', '💯', '🔴',
+        '🟠', '🟡', '🟢', '🔵', '🟣', '⚫', '⚪', '🟤',
+        '🔺', '🔻', '🔸', '🔹', '🔶', '🔷', '💠', '🔘',
+        '🔲', '🔳', '⬛', '⬜', '◼️', '◻️', '◾', '◽',
+        '▪️', '▫️', '🏁', '🚩', '🎌', '🏴', '🏳️', '🏳️‍🌈',
+        '🔈', '🔇', '🔉', '🔊', '🔔', '🔕', '📣', '📢',
+        '💬', '💭', '🗯️', '♠️', '♣️', '♥️', '♦️', '🃏',
+        '🎴', '🀄', '🕐', '🕑', '🕒', '🕓', '🕔', '🕕'
       ]
     }
   };
 
-  const categories = [
-    { id: 'recent' as const, label: '⏱️' },
-    { id: 'smile' as const, label: '😊' },
-    { id: 'gesture' as const, label: '👋' },
-    { id: 'object' as const, label: '❤️' }
-  ];
+  const categories = Object.entries(emojiCategories).map(([id, cat]) => ({
+    id,
+    label: cat.label,
+    icon: cat.icon
+  }));
 
   return (
     <>
@@ -61,27 +143,28 @@ export default function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
       />
 
       {/* 表情选择器 */}
-      <div className="absolute bottom-full right-0 mb-2 bg-white rounded-lg shadow-xl border border-gray-200 z-40 w-80">
+      <div className="absolute bottom-full left-0 mb-2 bg-white rounded-lg shadow-xl border border-gray-200 z-40 w-[360px]">
         {/* 分类标签 */}
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200">
+        <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-200 overflow-x-auto">
           {categories.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
-              className={`px-3 py-1.5 rounded-lg text-lg transition-colors ${
+              className={`px-2 py-1 rounded text-sm whitespace-nowrap transition-colors ${
                 activeCategory === cat.id
-                  ? 'bg-blue-100 text-blue-600'
-                  : 'hover:bg-gray-100'
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'text-gray-500 hover:bg-gray-100'
               }`}
+              title={cat.label}
             >
-              {cat.label}
+              <span className="text-lg">{cat.icon}</span>
             </button>
           ))}
         </div>
 
         {/* 表情网格 */}
-        <div className="p-3 max-h-64 overflow-y-auto">
-          <div className="grid grid-cols-8 gap-1">
+        <div className="p-2 h-[280px] overflow-y-auto">
+          <div className="grid grid-cols-8 gap-0.5">
             {emojiCategories[activeCategory].emojis.map((emoji, index) => (
               <button
                 key={index}
@@ -89,7 +172,7 @@ export default function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
                   onSelect(emoji);
                   onClose();
                 }}
-                className="w-9 h-9 flex items-center justify-center text-2xl hover:bg-gray-100 rounded transition-colors"
+                className="w-10 h-10 flex items-center justify-center text-2xl hover:bg-gray-100 rounded transition-colors"
                 title={emoji}
               >
                 {emoji}

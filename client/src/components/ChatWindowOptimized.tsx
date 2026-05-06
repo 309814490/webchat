@@ -1,17 +1,20 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { ArrowLeft, Mic, Smile, Plus, Reply, X, AtSign, MoreHorizontal } from 'lucide-react';
+import { ArrowLeft, Mic, Smile, Plus, Reply, X, AtSign, MoreHorizontal, Bell, MessageSquare, Settings } from 'lucide-react';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
-import { conversationApi, messageApi, fileApi, UserInfo } from '../services/api';
+import { conversationApi, messageApi, fileApi, UserInfo, groupApi } from '../services/api';
 import EmojiPicker from './EmojiPicker';
 import MoreActionsPanel from './MoreActionsPanel';
 import MentionSelector from './MentionSelector';
 import GroupInfo from './GroupInfo';
+import GroupAnnouncement from './GroupAnnouncement';
+import ChatHistory from './ChatHistory';
 
 interface ChatWindowProps {
   friend: UserInfo;
   onClose: () => void;
   isGroup?: boolean; // 标识是否为群聊
+  onConversationUpdated?: (newName?: string) => void;
 }
 
 interface Message {
@@ -35,7 +38,7 @@ interface Message {
   recalled?: boolean;
 }
 
-export default function ChatWindowOptimized({ friend, onClose, isGroup = false }: ChatWindowProps) {
+export default function ChatWindowOptimized({ friend, onClose, isGroup = false, onConversationUpdated }: ChatWindowProps) {
   const [message, setMessage] = useState('');
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -53,6 +56,11 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false }
   const [isMentionAll, setIsMentionAll] = useState(false);
   const [readMentionIds, setReadMentionIds] = useState<Set<number>>(new Set());
   const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [showAnnouncement, setShowAnnouncement] = useState(false);
+  const [showChatHistory, setShowChatHistory] = useState(false);
+  const [groupName, setGroupName] = useState(friend.username);
+  const [latestAnnouncement, setLatestAnnouncement] = useState<any>(null);
+  const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const stompClientRef = useRef<Client | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -64,6 +72,17 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false }
     const me = groupMembers.find((m: any) => m.id === currentUserId);
     return me?.role || 'MEMBER';
   }, [isGroup, currentUserId, groupMembers]);
+
+  // 重新加载最新公告
+  const reloadLatestAnnouncement = async () => {
+    if (!isGroup || !conversationId) return;
+    try {
+      const response = await groupApi.getLatestAnnouncement(conversationId);
+      setLatestAnnouncement(response.data);
+    } catch (error) {
+      console.error('Failed to reload latest announcement:', error);
+    }
+  };
 
   // 重新加载群成员信息
   const reloadGroupMembers = async () => {
@@ -107,6 +126,13 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false }
           } catch (error) {
             console.error('Failed to load conversation member info:', error);
           }
+          // 加载最新公告
+          try {
+            const announcementResponse = await groupApi.getLatestAnnouncement(convId);
+            setLatestAnnouncement(announcementResponse.data);
+          } catch (error) {
+            console.error('Failed to load latest announcement:', error);
+          }
         } else {
           // 私聊：创建或获取会话
           const response = await conversationApi.getOrCreatePrivateConversation(Number(friend.id));
@@ -119,6 +145,40 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false }
     };
     init();
   }, [friend.id, isGroup]);
+
+  // 从 localStorage 加载已关闭的公告 ID
+  useEffect(() => {
+    if (!conversationId) return;
+    const key = `dismissedAnnouncement_${conversationId}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      setDismissedAnnouncementId(Number(stored));
+    }
+  }, [conversationId]);
+
+  // 保存已关闭的公告 ID 到 localStorage
+  useEffect(() => {
+    if (!conversationId || dismissedAnnouncementId === null) return;
+    const key = `dismissedAnnouncement_${conversationId}`;
+    localStorage.setItem(key, String(dismissedAnnouncementId));
+  }, [conversationId, dismissedAnnouncementId]);
+
+  // 从 localStorage 加载已读的 @消息 ID
+  useEffect(() => {
+    if (!conversationId) return;
+    const key = `readMentions_${conversationId}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      setReadMentionIds(new Set(JSON.parse(stored)));
+    }
+  }, [conversationId]);
+
+  // 保存已读的 @消息 ID 到 localStorage
+  useEffect(() => {
+    if (!conversationId || readMentionIds.size === 0) return;
+    const key = `readMentions_${conversationId}`;
+    localStorage.setItem(key, JSON.stringify(Array.from(readMentionIds)));
+  }, [conversationId, readMentionIds]);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -240,39 +300,113 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false }
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 bg-white z-50 flex flex-col">
-      {/* 头部 - 标题居中显示 */}
-      <div className="bg-white px-4 py-3 shadow-sm flex items-center justify-between">
-        {/* 左侧返回按钮 */}
-        <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-full">
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
-        </button>
+  // 群设置页面：独立页面渲染
+  if (isGroup && showGroupInfo && conversationId) {
+    return (
+      <GroupInfo
+        conversationId={conversationId}
+        groupName={groupName}
+        memberCount={memberCount}
+        groupMembers={groupMembers}
+        currentUserId={currentUserId}
+        currentUserRole={currentUserRole}
+        onClose={() => setShowGroupInfo(false)}
+        onMembersUpdated={reloadGroupMembers}
+        onGroupNameUpdated={(newName) => { setGroupName(newName); onConversationUpdated?.(newName); }}
+      />
+    );
+  }
 
-        {/* 中间标题 */}
-        <div className="flex-1 flex justify-center">
-          <p className="text-lg font-semibold text-gray-900">
+  // 聊天记录页面：独立页面渲染
+  if (showChatHistory && conversationId) {
+    return (
+      <ChatHistory
+        conversationId={conversationId}
+        isGroup={isGroup}
+        onClose={() => setShowChatHistory(false)}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-white">
+      {/* 头部 */}
+      <div className="bg-[#f5f5f5] pl-[30px] pr-5 h-[68px] border-b border-[#e0e0e0] flex items-center justify-between shrink-0">
+        {/* 左侧标题 */}
+        <div className="flex-1">
+          <p className="text-[25px] font-medium text-gray-800">
             {isGroup
-              ? `${friend.username}（${memberCount}）`
-              : friend.studentId
+              ? `${groupName}（${memberCount}）`
+              : friend.studentId || friend.username
             }
           </p>
         </div>
 
-        {/* 右侧：群聊显示"..."按钮，私聊占位 */}
-        {isGroup ? (
+        {/* 右侧：功能按钮 */}
+        <div className="flex items-center gap-3">
+          {isGroup && (
+            <button
+              onClick={() => setShowAnnouncement(true)}
+              className="p-1.5 hover:bg-black/5 rounded transition-colors"
+              title="公告"
+            >
+              <Bell className="w-[22px] h-[22px] text-gray-500" strokeWidth={1.5} />
+            </button>
+          )}
           <button
-            onClick={() => setShowGroupInfo(true)}
-            className="p-2 hover:bg-gray-100 rounded-full"
+            onClick={() => setShowChatHistory(true)}
+            className="p-1.5 hover:bg-black/5 rounded transition-colors"
+            title="聊天记录"
           >
-            <MoreHorizontal className="w-5 h-5 text-gray-600" />
+            <MessageSquare className="w-[22px] h-[22px] text-gray-500" strokeWidth={1.5} />
           </button>
-        ) : (
-          <div className="w-9" />
-        )}
+          {isGroup && (currentUserRole === 'OWNER' || currentUserRole === 'ADMIN') && (
+            <button
+              onClick={() => setShowGroupInfo(true)}
+              className="p-1.5 hover:bg-black/5 rounded transition-colors"
+              title="群设置"
+            >
+              <Settings className="w-[22px] h-[22px] text-gray-500" strokeWidth={1.5} />
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 bg-gray-50 relative">
+      <div className="flex-1 overflow-y-auto p-4 bg-[#f5f5f5] relative">
+        {/* 群公告卡片 */}
+        {isGroup && latestAnnouncement && dismissedAnnouncementId !== latestAnnouncement.id && (
+          <div className="sticky top-0 z-10 flex justify-center mb-4 -mx-4 px-4 pt-0 pb-4 bg-[#f5f5f5]">
+            <div
+              className="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-3 max-w-[600px] w-full cursor-pointer hover:shadow-md transition-shadow relative"
+              onClick={() => setShowAnnouncement(true)}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDismissedAnnouncementId(latestAnnouncement.id);
+                }}
+                className="absolute top-2 right-2 p-1 hover:bg-gray-100 rounded-full transition-colors"
+                title="关闭"
+              >
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+              <div className="flex items-start gap-3 pr-6">
+                <Bell className="w-5 h-5 text-[#faad14] shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-semibold text-[#faad14]">群公告</span>
+                  </div>
+                  <p className="text-sm text-gray-800 line-clamp-2 mb-2">{latestAnnouncement.content}</p>
+                  <div className="flex items-center justify-between text-xs text-gray-400">
+                    <span>{latestAnnouncement.creatorStudentId || latestAnnouncement.creatorName || '未知'}</span>
+                    <span>{new Date(latestAnnouncement.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 py-10">
             <p>开始聊天吧</p>
@@ -422,11 +556,11 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false }
               return (
                 <div key={msg.id} id={`msg-${msg.id}`} className={`flex gap-2 ${isMe ? 'justify-end' : 'justify-start'} items-start relative group transition-colors duration-500 rounded-lg ${isMentionedMe ? 'bg-orange-50 border-l-2 border-orange-400 pl-2' : ''}`}>
                   {!isMe && (
-                    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0">
+                    <div className="w-9 h-9 rounded bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0">
                       {msg.senderAvatarUrl ? (
-                        <img src={msg.senderAvatarUrl} alt={msg.senderName} className="w-full h-full rounded-full object-cover" />
+                        <img src={msg.senderAvatarUrl} alt={msg.senderName} className="w-full h-full rounded object-cover" />
                       ) : (
-                        <span className="text-sm">{msg.senderStudentId || '?'}</span>
+                        <span className="text-xs">{msg.senderStudentId || '?'}</span>
                       )}
                     </div>
                   )}
@@ -512,11 +646,11 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false }
                         </div>
                       </a>
                     ) : (
-                      <div className={`${isMe ? 'bg-blue-500 text-white' : 'bg-white'} rounded-lg p-3 shadow`}>
-                        <p className="text-sm break-words">
+                      <div className={`${isMe ? 'bg-[#95ec69]' : 'bg-white'} rounded p-2.5 shadow-sm`}>
+                        <p className="text-sm break-words text-gray-900">
                           {msg.content.split(/(@\S+)/g).map((part, i) =>
                             part.startsWith('@') ? (
-                              <span key={i} className={`font-semibold ${isMe ? 'text-blue-100' : 'text-blue-600'}`}>{part}</span>
+                              <span key={i} className="font-semibold text-blue-600">{part}</span>
                             ) : part
                           )}
                         </p>
@@ -565,11 +699,11 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false }
                     })()}
                   </div>
                   {isMe && (
-                    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0">
+                    <div className="w-9 h-9 rounded bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0">
                       {msg.senderAvatarUrl ? (
-                        <img src={msg.senderAvatarUrl} alt={msg.senderName} className="w-full h-full rounded-full object-cover" />
+                        <img src={msg.senderAvatarUrl} alt={msg.senderName} className="w-full h-full rounded object-cover" />
                       ) : (
-                        <span className="text-sm">{msg.senderStudentId || '我'}</span>
+                        <span className="text-xs">{msg.senderStudentId || '我'}</span>
                       )}
                     </div>
                   )}
@@ -611,10 +745,10 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false }
         );
       })()}
 
-      <div className="bg-white border-t border-gray-200 p-3">
+      <div className="bg-[#f5f5f5] border-t border-[#e0e0e0] px-4 py-2 shrink-0">
         {/* 回复预览条 */}
         {replyingTo && (
-          <div className="flex items-center gap-2 mb-2 px-2 py-2 bg-gray-50 rounded-lg border-l-2 border-blue-500">
+          <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-gray-50 rounded border-l-2 border-blue-500">
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-blue-600">
                 回复 {replyingTo.senderStudentId || replyingTo.senderName}
@@ -628,176 +762,155 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false }
             </div>
             <button
               onClick={() => setReplyingTo(null)}
-              className="p-1 hover:bg-gray-200 rounded-full shrink-0"
+              className="p-1 hover:bg-gray-200 rounded shrink-0"
             >
-              <X className="w-4 h-4 text-gray-400" />
+              <X className="w-3.5 h-3.5 text-gray-400" />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-2">
-          {/* 左侧：语音/键盘切换按钮 */}
-          <button
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors shrink-0"
-            onClick={() => setIsVoiceMode(!isVoiceMode)}
-            title={isVoiceMode ? "切换到键盘" : "切换到语音"}
-          >
-            <Mic className={`w-6 h-6 ${isVoiceMode ? 'text-blue-600' : 'text-gray-600'}`} />
-          </button>
 
-          {/* 中间：输入框或语音按钮 */}
-          {isVoiceMode ? (
-            <button
-              className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 rounded-lg text-gray-700 font-medium transition-colors"
-              onMouseDown={() => console.log('开始录音')}
-              onMouseUp={() => console.log('结束录音')}
-              onTouchStart={() => console.log('开始录音')}
-              onTouchEnd={() => console.log('结束录音')}
-            >
-              按住 说话
-            </button>
-          ) : (
-            <div className="flex-1 flex items-center gap-2 relative">
-              {/* @成员选择器 */}
-              {isGroup && showMentionSelector && (
-                <MentionSelector
-                  members={groupMembers.filter((m: any) => m.id !== currentUserId)}
-                  search={mentionSearch}
-                  canMentionAll={currentUserRole === 'OWNER' || currentUserRole === 'ADMIN'}
-                  onSelect={(member) => {
-                    const atText = member === null ? '@所有人 ' : `@${member.studentId || member.username} `;
-                    const atIdx = message.lastIndexOf('@');
-                    const newMsg = message.slice(0, atIdx) + atText;
-                    setMessage(newMsg);
-                    // 记录被@的用户
-                    if (member === null) {
-                      setIsMentionAll(true);
-                    } else {
-                      setMentionedUsers(prev => {
-                        if (prev.some(u => u.id === member.id)) return prev;
-                        return [...prev, { id: member.id, studentId: member.studentId }];
-                      });
-                    }
-                    setShowMentionSelector(false);
-                    setMentionSearch('');
-                    inputRef.current?.focus();
-                  }}
-                  onClose={() => { setShowMentionSelector(false); setMentionSearch(''); }}
+        {/* 输入框 */}
+        <div className="relative mb-2">
+          {/* @成员选择器 */}
+          {isGroup && showMentionSelector && (
+            <MentionSelector
+              members={groupMembers.filter((m: any) => m.id !== currentUserId)}
+              search={mentionSearch}
+              canMentionAll={currentUserRole === 'OWNER' || currentUserRole === 'ADMIN'}
+              onSelect={(member) => {
+                const atText = member === null ? '@所有人 ' : `@${member.studentId || member.username} `;
+                const atIdx = message.lastIndexOf('@');
+                const newMsg = message.slice(0, atIdx) + atText;
+                setMessage(newMsg);
+                if (member === null) {
+                  setIsMentionAll(true);
+                } else {
+                  setMentionedUsers(prev => {
+                    if (prev.some(u => u.id === member.id)) return prev;
+                    return [...prev, { id: member.id, studentId: member.studentId }];
+                  });
+                }
+                setShowMentionSelector(false);
+                setMentionSearch('');
+                inputRef.current?.focus();
+              }}
+              onClose={() => { setShowMentionSelector(false); setMentionSearch(''); }}
+            />
+          )}
+          <textarea
+            ref={inputRef}
+            value={message}
+            onChange={(e) => {
+              const val = e.target.value;
+              setMessage(val);
+              if (isGroup) {
+                const atIdx = val.lastIndexOf('@');
+                if (atIdx !== -1 && (atIdx === 0 || val[atIdx - 1] === ' ')) {
+                  const search = val.slice(atIdx + 1);
+                  if (!search.includes(' ')) {
+                    setMentionSearch(search);
+                    setShowMentionSelector(true);
+                    return;
+                  }
+                }
+                setShowMentionSelector(false);
+                setMentionSearch('');
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setShowMentionSelector(false);
+                setMentionSearch('');
+              }
+              if (e.key === 'Enter' && !e.shiftKey && !showMentionSelector) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder={isGroup ? '输入消息，@成员...' : '输入消息...'}
+            className="w-full h-[100px] px-3 py-2 bg-white border border-gray-300 rounded resize-none focus:outline-none focus:border-blue-400 text-[14px] text-gray-800"
+          />
+        </div>
+
+        {/* 底部工具栏和发送按钮 */}
+        <div className="flex items-center justify-between">
+          {/* 左侧工具栏 */}
+          <div className="flex items-center gap-1">
+            <div className="relative">
+              <button
+                className="p-1.5 hover:bg-black/5 rounded transition-colors"
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                title="表情"
+              >
+                <Smile className="w-5 h-5 text-gray-500" />
+              </button>
+              {showEmojiPicker && (
+                <EmojiPicker
+                  onSelect={handleEmojiSelect}
+                  onClose={() => setShowEmojiPicker(false)}
                 />
               )}
-              <input
-                ref={inputRef}
-                type="text"
-                value={message}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setMessage(val);
-                  // 检测@触发
-                  if (isGroup) {
-                    const atIdx = val.lastIndexOf('@');
-                    if (atIdx !== -1 && (atIdx === 0 || val[atIdx - 1] === ' ')) {
-                      const search = val.slice(atIdx + 1);
-                      if (!search.includes(' ')) {
-                        setMentionSearch(search);
-                        setShowMentionSelector(true);
-                        return;
+            </div>
+            <div className="relative">
+              <button
+                className="p-1.5 hover:bg-black/5 rounded transition-colors"
+                onClick={() => setShowMoreMenu(!showMoreMenu)}
+                title="文件"
+              >
+                <Plus className="w-5 h-5 text-gray-500" />
+              </button>
+              {showMoreMenu && (
+                <MoreActionsPanel
+                  onClose={() => setShowMoreMenu(false)}
+                  onImageSelect={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    input.onchange = (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (file) {
+                        handleFileUpload(file, 'IMAGE');
                       }
-                    }
-                    setShowMentionSelector(false);
-                    setMentionSearch('');
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    setShowMentionSelector(false);
-                    setMentionSearch('');
-                  }
-                  if (e.key === 'Enter' && !e.shiftKey && !showMentionSelector) handleSend();
-                }}
-                placeholder={isGroup ? '输入消息，@成员...' : '输入消息...'}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              {message.trim() && (
-                <button
-                  onClick={handleSend}
-                  disabled={loading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 transition-colors shrink-0"
-                >
-                  发送
-                </button>
+                    };
+                    input.click();
+                  }}
+                  onFileSelect={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '*/*';
+                    input.onchange = (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (file) {
+                        handleFileUpload(file, 'FILE');
+                      }
+                    };
+                    input.click();
+                  }}
+                  onVideoSelect={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'video/*';
+                    input.onchange = (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (file) {
+                        handleFileUpload(file, 'VIDEO');
+                      }
+                    };
+                    input.click();
+                  }}
+                />
               )}
             </div>
-          )}
+          </div>
 
-          {/* 右侧：表情和+按钮 */}
-          {!isVoiceMode && !message.trim() && (
-            <>
-              <div className="relative">
-                <button
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors shrink-0"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  title="表情"
-                >
-                  <Smile className="w-6 h-6 text-gray-600" />
-                </button>
-                {showEmojiPicker && (
-                  <EmojiPicker
-                    onSelect={handleEmojiSelect}
-                    onClose={() => setShowEmojiPicker(false)}
-                  />
-                )}
-              </div>
-              <div className="relative">
-                <button
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors shrink-0"
-                  onClick={() => setShowMoreMenu(!showMoreMenu)}
-                  title="更多"
-                >
-                  <Plus className="w-6 h-6 text-gray-600" />
-                </button>
-                {showMoreMenu && (
-                  <MoreActionsPanel
-                    onClose={() => setShowMoreMenu(false)}
-                    onImageSelect={() => {
-                      const input = document.createElement('input');
-                      input.type = 'file';
-                      input.accept = 'image/*';
-                      input.onchange = (e) => {
-                        const file = (e.target as HTMLInputElement).files?.[0];
-                        if (file) {
-                          handleFileUpload(file, 'IMAGE');
-                        }
-                      };
-                      input.click();
-                    }}
-                    onFileSelect={() => {
-                      const input = document.createElement('input');
-                      input.type = 'file';
-                      input.accept = '*/*';
-                      input.onchange = (e) => {
-                        const file = (e.target as HTMLInputElement).files?.[0];
-                        if (file) {
-                          handleFileUpload(file, 'FILE');
-                        }
-                      };
-                      input.click();
-                    }}
-                    onVideoSelect={() => {
-                      const input = document.createElement('input');
-                      input.type = 'file';
-                      input.accept = 'video/*';
-                      input.onchange = (e) => {
-                        const file = (e.target as HTMLInputElement).files?.[0];
-                        if (file) {
-                          handleFileUpload(file, 'VIDEO');
-                        }
-                      };
-                      input.click();
-                    }}
-                  />
-                )}
-              </div>
-            </>
-          )}
+          {/* 右侧发送按钮 */}
+          <button
+            onClick={handleSend}
+            disabled={loading || !message.trim()}
+            className="px-5 py-1.5 bg-[#07c160] text-white text-[13px] rounded hover:bg-[#06ad56] disabled:bg-[#e0e0e0] disabled:text-gray-400 transition-colors"
+          >
+            发送(S)
+          </button>
         </div>
 
         {/* 隐藏的文件输入 */}
@@ -816,17 +929,14 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false }
         />
       </div>
 
-      {/* 群聊信息页面 */}
-      {isGroup && showGroupInfo && conversationId && (
-        <GroupInfo
-          conversationId={conversationId}
-          groupName={friend.username}
-          memberCount={memberCount}
-          groupMembers={groupMembers}
+      {/* 群公告页面 */}
+      {isGroup && showAnnouncement && conversationId && (
+        <GroupAnnouncement
+          groupId={conversationId}
           currentUserId={currentUserId}
           currentUserRole={currentUserRole}
-          onClose={() => setShowGroupInfo(false)}
-          onMembersUpdated={reloadGroupMembers}
+          onClose={() => setShowAnnouncement(false)}
+          onAnnouncementChanged={reloadLatestAnnouncement}
         />
       )}
     </div>

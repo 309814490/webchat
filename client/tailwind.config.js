@@ -5,7 +5,11 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        sans: ["'Microsoft YaHei'", "'微软雅黑'", "'PingFang SC'", "'Helvetica Neue'", "'Segoe UI'", "sans-serif"],
+      },
+    },
   },
   plugins: [],
 }

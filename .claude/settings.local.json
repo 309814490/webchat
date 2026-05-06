@@ -19,7 +19,15 @@
       "Bash(curl -s -o nanguo.gif \"http://img.soogif.com/6D5eMu9iE0K3GGZFdQMng9J7ebzGo3m8.gif\" -w \"%{http_code} %{size_download}\")",
       "Bash(curl -s -o dianzan.gif \"http://img.soogif.com/9R5oJwXzBjdkJoCtuwqWjjAKX3NcpbTk.gif\" -w \"%{http_code} %{size_download}\")",
       "Bash(curl -s -o baobao.gif \"http://img.soogif.com/50Kue7VtRc4FhklrRVA9fd57chOEfNzN.gif\" -w \"%{http_code} %{size_download}\")",
-      "Bash(curl -s -o wanan.gif \"http://img.soogif.com/Ll2NwBBGEM9TVd2qk8nXo3buiTum1I2J.gif\" -w \"%{http_code} %{size_download}\")"
+      "Bash(curl -s -o wanan.gif \"http://img.soogif.com/Ll2NwBBGEM9TVd2qk8nXo3buiTum1I2J.gif\" -w \"%{http_code} %{size_download}\")",
+      "Bash(node -e \":*)",
+      "Bash(npm uninstall electron)",
+      "Bash(npm install --save-dev electron@30.0.0 --registry=https://registry.npmmirror.com)",
+      "Bash(npm ls electron)",
+      "Bash(tasklist)",
+      "Bash(powershell.exe -Command \"Remove-Item -Path ''node_modules\\\\electron'' -Recurse -Force -ErrorAction SilentlyContinue\")",
+      "Bash(gh api repos/electron/electron/issues/8200/comments --jq '.[0:3][] | .body')",
+      "Bash(npm pack electron@30.0.0 --registry=https://registry.npmmirror.com)"
     ]
   }
 }

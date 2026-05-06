@@ -133,6 +133,15 @@ export const groupApi = {
     api.post<{ message: string }>(`/groups/${groupId}/admins/${userId}`),
   removeAdmin: (groupId: number, userId: number) =>
     api.delete<{ message: string }>(`/groups/${groupId}/admins/${userId}`),
+  // 公告相关
+  createAnnouncement: (groupId: number, content: string) =>
+    api.post<any>(`/groups/${groupId}/announcements`, { content }),
+  getAnnouncements: (groupId: number) =>
+    api.get<any[]>(`/groups/${groupId}/announcements`),
+  getLatestAnnouncement: (groupId: number) =>
+    api.get<any>(`/groups/${groupId}/announcements/latest`),
+  deleteAnnouncement: (groupId: number, announcementId: number) =>
+    api.delete<{ message: string }>(`/groups/${groupId}/announcements/${announcementId}`),
 };
 
 export const conversationApi = {
@@ -153,6 +162,14 @@ export const messageApi = {
     api.post<any>('/messages', data),
   getMessages: (conversationId: number, page: number = 0, size: number = 50) =>
     api.get<any>(`/messages/conversation/${conversationId}?page=${page}&size=${size}`),
+  searchMessages: (conversationId: number, keyword: string, page: number = 0, size: number = 20) =>
+    api.get<any>(`/messages/conversation/${conversationId}/search?keyword=${encodeURIComponent(keyword)}&page=${page}&size=${size}`),
+  searchByType: (conversationId: number, types: string[], page: number = 0, size: number = 20) =>
+    api.get<any>(`/messages/conversation/${conversationId}/search/type?types=${types.join(',')}&page=${page}&size=${size}`),
+  searchByDate: (conversationId: number, startDate: string, endDate: string, page: number = 0, size: number = 20) =>
+    api.get<any>(`/messages/conversation/${conversationId}/search/date?startDate=${startDate}&endDate=${endDate}&page=${page}&size=${size}`),
+  searchBySender: (conversationId: number, senderId: number, page: number = 0, size: number = 20) =>
+    api.get<any>(`/messages/conversation/${conversationId}/search/sender?senderId=${senderId}&page=${page}&size=${size}`),
   recallMessage: (messageId: number) =>
     api.post<any>(`/messages/${messageId}/recall`),
 };

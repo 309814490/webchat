@@ -2,6 +2,7 @@ package com.webchat.controller;
 
 import com.webchat.dto.CreateGroupRequest;
 import com.webchat.entity.Group;
+import com.webchat.entity.GroupAnnouncement;
 import com.webchat.entity.GroupMember;
 import com.webchat.security.JwtTokenProvider;
 import com.webchat.service.GroupService;
@@ -81,7 +82,26 @@ public class GroupController {
         }
     }
 
-    @PostMapping("/{groupId}/members/{memberId}/set-admin")
+    @PutMapping("/{groupId}/name")
+    public ResponseEntity<?> updateGroupName(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long groupId,
+            @RequestBody Map<String, String> request
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            String name = request.get("name");
+            if (name == null || name.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "群名称不能为空"));
+            }
+            groupService.updateGroupName(groupId, name.trim(), userId);
+            return ResponseEntity.ok(Map.of("message", "群名称修改成功"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{groupId}/admins/{memberId}")
     public ResponseEntity<?> setMemberAsAdmin(
             @RequestHeader("Authorization") String token,
             @PathVariable Long groupId,
@@ -96,7 +116,7 @@ public class GroupController {
         }
     }
 
-    @PostMapping("/{groupId}/members/{memberId}/remove-admin")
+    @DeleteMapping("/{groupId}/admins/{memberId}")
     public ResponseEntity<?> removeMemberAdmin(
             @RequestHeader("Authorization") String token,
             @PathVariable Long groupId,
@@ -106,6 +126,90 @@ public class GroupController {
             Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
             groupService.removeMemberAdmin(groupId, memberId, userId);
             return ResponseEntity.ok(Map.of("message", "已取消管理员权限"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{groupId}/transfer")
+    public ResponseEntity<?> transferOwner(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long groupId,
+            @RequestBody Map<String, Long> request
+    ) {
+        try {
+            Long currentOwnerId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            Long newOwnerId = request.get("newOwnerId");
+
+            if (newOwnerId == null) {
+                return ResponseEntity.badRequest().body(Map.of("message", "新群主ID不能为空"));
+            }
+
+            groupService.transferOwner(groupId, newOwnerId, currentOwnerId);
+            return ResponseEntity.ok(Map.of("message", "转让群主成功"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // ===== 公告相关接口 =====
+
+    @PostMapping("/{groupId}/announcements")
+    public ResponseEntity<?> createAnnouncement(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long groupId,
+            @RequestBody Map<String, String> request
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            String content = request.get("content");
+            GroupAnnouncement announcement = groupService.createAnnouncement(groupId, userId, content);
+            return ResponseEntity.ok(announcement);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{groupId}/announcements")
+    public ResponseEntity<?> getAnnouncements(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long groupId
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            System.out.println("🔍 Controller: 获取公告请求 - groupId=" + groupId + ", userId=" + userId);
+            List<Map<String, Object>> announcements = groupService.getAnnouncements(groupId, userId);
+            return ResponseEntity.ok(announcements);
+        } catch (Exception e) {
+            System.out.println("❌ Controller: 获取公告失败 - " + e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{groupId}/announcements/latest")
+    public ResponseEntity<?> getLatestAnnouncement(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long groupId
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            Map<String, Object> announcement = groupService.getLatestAnnouncement(groupId, userId);
+            return ResponseEntity.ok(announcement);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{groupId}/announcements/{announcementId}")
+    public ResponseEntity<?> deleteAnnouncement(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long groupId,
+            @PathVariable Long announcementId
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            groupService.deleteAnnouncement(groupId, announcementId, userId);
+            return ResponseEntity.ok(Map.of("message", "公告已删除"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
