@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { ArrowLeft, Mic, Smile, Plus, Reply, X, AtSign, MoreHorizontal, Bell, MessageSquare, Settings } from 'lucide-react';
+import { Smile, Plus, Reply, X, AtSign, Bell, MessageSquare, Settings } from 'lucide-react';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { conversationApi, messageApi, fileApi, UserInfo, groupApi } from '../services/api';
@@ -38,6 +38,57 @@ interface Message {
   recalled?: boolean;
 }
 
+// 提取到组件外部，避免每次渲染重新创建
+const formatMessageTime = (timeStr: string) => {
+  const date = new Date(timeStr);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (days === 0) return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  if (days === 1) return '昨天 ' + date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' +
+         date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+};
+
+type GroupMeta = {
+  isFirst: boolean; skip: boolean; count: number;
+  senders: { id: number; studentId: string; avatarUrl: string; times: number }[];
+};
+
+// 计算消息分组的纯函数，供 useMemo 使用
+function computeGroupMeta(messages: Message[]): GroupMeta[] {
+  const groupMeta: GroupMeta[] = messages.map(() => ({
+    isFirst: false, skip: false, count: 0, senders: []
+  }));
+  const contentGroups = new Map<string, number[]>();
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.recalled) continue;
+    const key = `${m.type}::${m.content}`;
+    if (!contentGroups.has(key)) contentGroups.set(key, []);
+    contentGroups.get(key)!.push(i);
+  }
+  for (const [, indices] of contentGroups) {
+    if (indices.length < 3) continue;
+    const lastIdx = indices[indices.length - 1];
+    const senderMap = new Map<number, { id: number; studentId: string; avatarUrl: string; times: number }>();
+    for (const idx of indices) {
+      const m = messages[idx];
+      const existing = senderMap.get(m.senderId);
+      if (existing) existing.times++;
+      else senderMap.set(m.senderId, { id: m.senderId, studentId: m.senderStudentId || m.senderName, avatarUrl: m.senderAvatarUrl || '', times: 1 });
+    }
+    const senders = Array.from(senderMap.values());
+    groupMeta[lastIdx] = { isFirst: true, skip: false, count: indices.length, senders };
+    for (const idx of indices) {
+      if (idx !== lastIdx) {
+        groupMeta[idx] = { isFirst: false, skip: true, count: indices.length, senders };
+      }
+    }
+  }
+  return groupMeta;
+}
+
 export default function ChatWindowOptimized({ friend, onClose, isGroup = false, onConversationUpdated }: ChatWindowProps) {
   const [message, setMessage] = useState('');
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -46,7 +97,6 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [memberCount, setMemberCount] = useState<number>(0);
   const [groupMembers, setGroupMembers] = useState<any[]>([]);
   const [showMentionSelector, setShowMentionSelector] = useState(false);
@@ -61,10 +111,16 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
   const [groupName, setGroupName] = useState(friend.username);
   const [latestAnnouncement, setLatestAnnouncement] = useState<any>(null);
   const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState<number | null>(null);
+
+  // 无限滚动状态
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const stompClientRef = useRef<Client | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // 计算当前用户在群组中的角色
   const currentUserRole = useMemo(() => {
@@ -72,6 +128,27 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
     const me = groupMembers.find((m: any) => m.id === currentUserId);
     return me?.role || 'MEMBER';
   }, [isGroup, currentUserId, groupMembers]);
+
+  // 缓存消息分组计算，仅在 messages 变化时重新计算
+  const groupMeta = useMemo(() => computeGroupMeta(messages), [messages]);
+
+  // 过滤掉被折叠的消息，保留原始索引用于查找 groupMeta
+  const groupedMessages = useMemo(() => {
+    return messages
+      .map((msg, idx) => ({ msg, originalIdx: idx }))
+      .filter(({ originalIdx }) => !groupMeta[originalIdx].skip);
+  }, [messages, groupMeta]);
+
+  // 缓存 @提及消息列表
+  const mentionMessages = useMemo(() => {
+    if (!isGroup || !currentUserId) return [];
+    return messages.filter(m =>
+      m.senderId !== currentUserId && (
+        m.mentionAll === true ||
+        (m.mentionedUserIds && m.mentionedUserIds.includes(currentUserId))
+      ) && !readMentionIds.has(m.id)
+    );
+  }, [messages, currentUserId, isGroup, readMentionIds]);
 
   // 重新加载最新公告
   const reloadLatestAnnouncement = async () => {
@@ -219,20 +296,72 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
     };
   }, [conversationId]);
 
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessagesLenRef = useRef(0);
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (!container) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    // 仅在新消息到来时自动滚动（且用户在底部附近）
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    const isNewMessage = messages.length > prevMessagesLenRef.current;
+    if (isNearBottom || isNewMessage && prevMessagesLenRef.current === 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    prevMessagesLenRef.current = messages.length;
   }, [messages]);
 
-  const loadMessages = async () => {
+  const loadMessages = async (page: number = 0, append: boolean = false) => {
     if (!conversationId) return;
     try {
-      const response = await messageApi.getMessages(conversationId);
+      if (append) setLoadingMore(true);
+      const response = await messageApi.getMessages(conversationId, page, 10);
       const list = response.data.content || [];
-      setMessages([...list].reverse());
+      const reversed = [...list].reverse();
+
+      if (append) {
+        // 加载更多历史消息，添加到前面
+        setMessages(prev => [...reversed, ...prev]);
+      } else {
+        // 首次加载
+        setMessages(reversed);
+      }
+
+      // 更新分页状态
+      setHasMore(!response.data.last);
+      setCurrentPage(page);
     } catch (error) {
       console.error('Failed to load messages:', error);
+    } finally {
+      if (append) setLoadingMore(false);
     }
   };
+
+  // 监听滚动，到顶部时加载更多
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || !hasMore || loadingMore) return;
+
+    const handleScroll = () => {
+      if (container.scrollTop < 100) {
+        // 滚动到顶部附近，加载更多
+        const prevScrollHeight = container.scrollHeight;
+        loadMessages(currentPage + 1, true).then(() => {
+          // 保持滚动位置
+          requestAnimationFrame(() => {
+            const newScrollHeight = container.scrollHeight;
+            container.scrollTop = newScrollHeight - prevScrollHeight;
+          });
+        });
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [conversationId, currentPage, hasMore, loadingMore]);
 
   const handleSend = async () => {
     if (!message.trim() || !conversationId) return;
@@ -289,16 +418,6 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
     }
   };
 
-  const handleClose = async () => {
-    if (conversationId) {
-      try {
-        await conversationApi.markAsRead(conversationId);
-      } catch (error) {
-        console.error('Failed to mark as read on close:', error);
-      }
-    }
-    onClose();
-  };
 
   // 群设置页面：独立页面渲染
   if (isGroup && showGroupInfo && conversationId) {
@@ -372,7 +491,7 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 bg-[#f5f5f5] relative">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 bg-[#f5f5f5] relative">
         {/* 群公告卡片 */}
         {isGroup && latestAnnouncement && dismissedAnnouncementId !== latestAnnouncement.id && (
           <div className="sticky top-0 z-10 flex justify-center mb-4 -mx-4 px-4 pt-0 pb-4 bg-[#f5f5f5]">
@@ -413,49 +532,8 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
           </div>
         ) : (
           <div className="space-y-4">
-            {(() => {
-              // 全局分组：相同 content+type 的消息（不限连续）≥3条时折叠
-              // 折叠卡片显示在该组最后一条消息的位置
-              type GroupMeta = {
-                isFirst: boolean; skip: boolean; count: number;
-                senders: { id: number; studentId: string; avatarUrl: string; times: number }[];
-              };
-              const groupMeta: GroupMeta[] = messages.map(() => ({
-                isFirst: false, skip: false, count: 0, senders: []
-              }));
-              // 按 content+type 分组，收集索引
-              const contentGroups = new Map<string, number[]>();
-              for (let i = 0; i < messages.length; i++) {
-                const m = messages[i];
-                if (m.recalled) continue;
-                const key = `${m.type}::${m.content}`;
-                if (!contentGroups.has(key)) contentGroups.set(key, []);
-                contentGroups.get(key)!.push(i);
-              }
-              for (const [, indices] of contentGroups) {
-                if (indices.length < 3) continue;
-                const lastIdx = indices[indices.length - 1];
-                const senderMap = new Map<number, { id: number; studentId: string; avatarUrl: string; times: number }>();
-                for (const idx of indices) {
-                  const m = messages[idx];
-                  const existing = senderMap.get(m.senderId);
-                  if (existing) existing.times++;
-                  else senderMap.set(m.senderId, { id: m.senderId, studentId: m.senderStudentId || m.senderName, avatarUrl: m.senderAvatarUrl || '', times: 1 });
-                }
-                const senders = Array.from(senderMap.values());
-                // 最后一条消息处显示折叠卡片
-                groupMeta[lastIdx] = { isFirst: true, skip: false, count: indices.length, senders };
-                // 其余位置跳过
-                for (const idx of indices) {
-                  if (idx !== lastIdx) {
-                    groupMeta[idx] = { isFirst: false, skip: true, count: indices.length, senders };
-                  }
-                }
-              }
-
-              return messages.map((msg, idx) => {
-              const meta = groupMeta[idx];
-              if (meta.skip) return null;
+            {groupedMessages.map(({ msg, originalIdx }) => {
+              const meta = groupMeta[originalIdx];
 
               const isMe = currentUserId ? msg.senderId === currentUserId : false;
 
@@ -464,17 +542,6 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
                 msg.mentionAll === true ||
                 (msg.mentionedUserIds && msg.mentionedUserIds.includes(currentUserId))
               );
-
-              const formatTime = (timeStr: string) => {
-                const date = new Date(timeStr);
-                const now = new Date();
-                const diff = now.getTime() - date.getTime();
-                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                if (days === 0) return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-                if (days === 1) return '昨天 ' + date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-                return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' +
-                       date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-              };
 
               const handlePlusOne = async () => {
                 if (!conversationId) return;
@@ -572,7 +639,7 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
                         </span>
                       )}
                       {msg.senderStudentId && <span className="text-xs text-gray-500">{msg.senderStudentId}</span>}
-                      <span className="text-[10px] text-gray-400">{formatTime(msg.createdAt)}</span>
+                      <span className="text-[10px] text-gray-400">{formatMessageTime(msg.createdAt)}</span>
                     </div>
 
                     {/* 引用回复块 */}
@@ -709,26 +776,17 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
                   )}
                 </div>
               );
-            });
-            })()}
+            })}
             <div ref={messagesEndRef} />
           </div>
         )}
       </div>
 
       {/* @提及浮标 */}
-      {isGroup && (() => {
-        const mentionMsgs = messages.filter(m =>
-          m.senderId !== currentUserId && (
-            m.mentionAll === true ||
-            (m.mentionedUserIds && currentUserId != null && m.mentionedUserIds.includes(currentUserId))
-          ) && !readMentionIds.has(m.id)
-        );
-        if (mentionMsgs.length === 0) return null;
-        return (
+      {isGroup && mentionMessages.length > 0 && (
           <button
             onClick={() => {
-              const firstMention = mentionMsgs[0];
+              const firstMention = mentionMessages[0];
               const el = document.getElementById(`msg-${firstMention.id}`);
               if (el) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -740,10 +798,9 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
             className="absolute bottom-4 right-4 bg-orange-500 text-white rounded-full px-3 py-2 shadow-lg hover:bg-orange-600 transition-colors flex items-center gap-1.5 text-sm font-medium z-10"
           >
             <AtSign className="w-4 h-4" />
-            <span>{mentionMsgs.length} 条@我</span>
+            <span>{mentionMessages.length} 条@我</span>
           </button>
-        );
-      })()}
+      )}
 
       <div className="bg-[#f5f5f5] border-t border-[#e0e0e0] px-4 py-2 shrink-0">
         {/* 回复预览条 */}

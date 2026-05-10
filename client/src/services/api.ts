@@ -40,6 +40,7 @@ export interface UserInfo {
   email: string;
   phone: string | null;
   studentId: string | null;
+  idCard: string | null;
   avatarUrl: string | null;
   status: string;
   createdAt: string;
@@ -189,6 +190,15 @@ export const fileApi = {
       }
     );
   },
+};
+
+export const userApi = {
+  getProfile: () =>
+    api.get<UserInfo>('/user/profile'),
+  updateProfile: (data: { username?: string; phone?: string; avatarUrl?: string }) =>
+    api.put<UserInfo>('/user/profile', data),
+  updatePassword: (data: { oldPassword: string; newPassword: string }) =>
+    api.put<{ message: string }>('/user/password', data),
 };
 
 export default api;

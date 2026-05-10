@@ -27,7 +27,8 @@
       "Bash(tasklist)",
       "Bash(powershell.exe -Command \"Remove-Item -Path ''node_modules\\\\electron'' -Recurse -Force -ErrorAction SilentlyContinue\")",
       "Bash(gh api repos/electron/electron/issues/8200/comments --jq '.[0:3][] | .body')",
-      "Bash(npm pack electron@30.0.0 --registry=https://registry.npmmirror.com)"
+      "Bash(npm pack electron@30.0.0 --registry=https://registry.npmmirror.com)",
+      "Bash(findstr :5173)"
     ]
   }
 }

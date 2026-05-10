@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Search, Bell, Users, MessageSquare } from 'lucide-react';
-import FriendRequests from './FriendRequests';
-import GroupList from './GroupList';
+import { Search, Bell, Users } from 'lucide-react';
 import { friendApi, UserInfo } from '../services/api';
 
 interface Props {
   onOpenChat?: (friend: { id: string; username: string; studentId: string | null; avatarUrl: string | null }) => void;
+  onOpenFriendRequests?: () => void;
+  onOpenGroupList?: () => void;
 }
 
-export default function Contacts({ onOpenChat }: Props) {
-  const [showFriendRequests, setShowFriendRequests] = useState(false);
-  const [showGroupList, setShowGroupList] = useState(false);
+export default function Contacts({ onOpenChat, onOpenFriendRequests, onOpenGroupList }: Props) {
   const [friends, setFriends] = useState<UserInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -31,9 +29,8 @@ export default function Contacts({ onOpenChat }: Props) {
   };
 
   const specialItems = [
-    { icon: Bell, label: '新的朋友', color: 'bg-orange-500', onClick: () => setShowFriendRequests(true) },
-    { icon: Users, label: '群聊', color: 'bg-green-500', onClick: () => setShowGroupList(true) },
-    { icon: MessageSquare, label: '系统通知', color: 'bg-blue-500', onClick: () => {} },
+    { icon: Bell, label: '新的朋友', color: 'bg-orange-500', onClick: () => onOpenFriendRequests?.() },
+    { icon: Users, label: '群聊', color: 'bg-green-500', onClick: () => onOpenGroupList?.() },
   ];
 
   const groupedContacts = friends.reduce((acc, friend) => {
@@ -106,9 +103,6 @@ export default function Contacts({ onOpenChat }: Props) {
           ))
         )}
       </div>
-
-      {showFriendRequests && <FriendRequests onClose={() => setShowFriendRequests(false)} />}
-      {showGroupList && <GroupList onClose={() => setShowGroupList(false)} />}
     </div>
   );
 }

@@ -49,7 +49,7 @@ public class MessageController {
     public ResponseEntity<?> getMessages(
             @PathVariable Long conversationId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(defaultValue = "10") int size,
             Authentication authentication) {
         try {
             Long userId = (Long) authentication.getPrincipal();

@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import { MessageCircle, Users, User, Settings } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MessageCircle, Users, Settings } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import Messages from './Messages';
 import Contacts from './Contacts';
 import Profile from './Profile';
 import ChatWindowOptimized from './ChatWindowOptimized';
+import ProfileEdit from './ProfileEdit';
+import FriendRequestsPanel from './FriendRequestsPanel';
+import GroupListPanel from './GroupListPanel';
 import { conversationApi, ConversationInfo } from '../services/api';
 
 type TabId = 'messages' | 'contacts' | 'profile';
@@ -18,6 +21,7 @@ interface ActiveChat {
     email: string;
     phone: string | null;
     studentId: string | null;
+    idCard: string | null;
     avatarUrl: string | null;
     status: string;
     createdAt: string;
@@ -25,16 +29,55 @@ interface ActiveChat {
 }
 
 export default function MainLayout() {
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabId>('messages');
   const [activeChat, setActiveChat] = useState<ActiveChat | null>(null);
   const [nameUpdates, setNameUpdates] = useState<Record<number, string>>({});
+  const [showProfileEdit, setShowProfileEdit] = useState(false);
+  const [showFriendRequests, setShowFriendRequests] = useState(false);
+  const [showGroupList, setShowGroupList] = useState(false);
+
+  // 默认打开第一个会话
+  useEffect(() => {
+    const loadFirstConversation = async () => {
+      try {
+        const res = await conversationApi.getUserConversations();
+        if (res.data.length > 0) {
+          handleOpenChat(res.data[0]);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    loadFirstConversation();
+  }, []);
 
   const tabs = [
     { id: 'messages' as TabId, icon: MessageCircle, label: '消息' },
     { id: 'contacts' as TabId, icon: Users, label: '通讯录' },
-    { id: 'profile' as TabId, icon: User, label: '我的' },
   ];
+
+  const handleTabChange = async (tabId: TabId) => {
+    setActiveTab(tabId);
+    setShowProfileEdit(false);
+    setShowFriendRequests(false);
+    setShowGroupList(false);
+    if (tabId === 'messages') {
+      try {
+        const res = await conversationApi.getUserConversations();
+        if (res.data.length > 0) {
+          handleOpenChat(res.data[0]);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    } else if (tabId === 'contacts') {
+      setActiveChat(null);
+      setShowFriendRequests(true);
+    } else {
+      setActiveChat(null);
+    }
+  };
 
   const handleOpenChat = async (conv: ConversationInfo) => {
     const isGroup = conv.type === 'GROUP';
@@ -45,6 +88,7 @@ export default function MainLayout() {
           email: '',
           phone: null,
           studentId: null,
+          idCard: null,
           avatarUrl: conv.avatarUrl || null,
           status: 'ACTIVE',
           createdAt: '',
@@ -55,11 +99,15 @@ export default function MainLayout() {
           email: '',
           phone: null,
           studentId: conv.otherStudentId || null,
+          idCard: null,
           avatarUrl: conv.avatarUrl || null,
           status: 'ACTIVE',
           createdAt: '',
         };
     setActiveChat({ conversationId: conv.id, type: isGroup ? 'group' : 'private', friend });
+    setShowProfileEdit(false);
+    setShowFriendRequests(false);
+    setShowGroupList(false);
   };
 
   const handleOpenFriendChat = async (friendInfo: { id: string; username: string; studentId: string | null; avatarUrl: string | null }) => {
@@ -78,6 +126,7 @@ export default function MainLayout() {
             email: '',
             phone: null,
             studentId: friendInfo.studentId,
+            idCard: null,
             avatarUrl: friendInfo.avatarUrl,
             status: 'ACTIVE',
             createdAt: '',
@@ -95,7 +144,7 @@ export default function MainLayout() {
       {/* 左侧图标导航栏 (64px) */}
       <div className="w-16 bg-[#2e2e2e] flex flex-col items-center py-3 shrink-0">
         {/* 头像 */}
-        <div className="mb-4">
+        <div className="mb-4 cursor-pointer" onClick={() => { setActiveTab('profile'); setShowProfileEdit(true); setActiveChat(null); }}>
           {user?.avatarUrl ? (
             <img src={user.avatarUrl} alt="me" className="w-9 h-9 rounded-full object-cover" />
           ) : (
@@ -110,7 +159,7 @@ export default function MainLayout() {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               title={tab.label}
               className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                 activeTab === tab.id
@@ -123,11 +172,15 @@ export default function MainLayout() {
           ))}
         </div>
 
-        {/* 底部设置/退出 */}
+        {/* 底部设置（我的） */}
         <button
-          onClick={logout}
-          title="退出登录"
-          className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
+          onClick={() => { setActiveTab('profile'); setShowProfileEdit(true); setActiveChat(null); }}
+          title="我的"
+          className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
+            activeTab === 'profile'
+              ? 'bg-white/20 text-white'
+              : 'text-gray-400 hover:bg-white/10 hover:text-white'
+          }`}
         >
           <Settings className="w-5 h-5" />
         </button>
@@ -139,16 +192,39 @@ export default function MainLayout() {
           <Messages onOpenChat={handleOpenChat} nameUpdates={nameUpdates} />
         )}
         {activeTab === 'contacts' && (
-          <Contacts onOpenChat={handleOpenFriendChat} />
+          <Contacts onOpenChat={handleOpenFriendChat} onOpenFriendRequests={() => { setShowFriendRequests(true); setShowGroupList(false); setActiveChat(null); setShowProfileEdit(false); }} onOpenGroupList={() => { setShowGroupList(true); setShowFriendRequests(false); setActiveChat(null); setShowProfileEdit(false); }} />
         )}
         {activeTab === 'profile' && (
-          <Profile />
+          <Profile onOpenProfileEdit={() => { setShowProfileEdit(true); setActiveChat(null); }} />
         )}
       </div>
 
       {/* 右侧聊天区 */}
       <div className="flex-1 overflow-hidden">
-        {activeChat ? (
+        {showProfileEdit ? (
+          <ProfileEdit onClose={() => setShowProfileEdit(false)} />
+        ) : showFriendRequests ? (
+          <FriendRequestsPanel onClose={() => setShowFriendRequests(false)} />
+        ) : showGroupList ? (
+          <GroupListPanel onOpenGroupChat={(group) => {
+            setActiveChat({
+              conversationId: group.id,
+              type: 'group',
+              friend: {
+                id: String(group.id),
+                username: group.name,
+                email: '',
+                phone: null,
+                studentId: null,
+                idCard: null,
+                avatarUrl: null,
+                status: 'ACTIVE',
+                createdAt: '',
+              },
+            });
+            setShowGroupList(false);
+          }} />
+        ) : activeChat ? (
           <ChatWindowOptimized
             key={activeChat.conversationId}
             friend={activeChat.friend}

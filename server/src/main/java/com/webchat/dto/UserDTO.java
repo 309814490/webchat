@@ -12,6 +12,7 @@ public class UserDTO {
     private String email;
     private String phone;
     private String studentId;
+    private String idCard;
     private String avatarUrl;
     private User.UserStatus status;
     private LocalDateTime createdAt;
@@ -23,6 +24,7 @@ public class UserDTO {
         dto.setEmail(user.getEmail());
         dto.setPhone(user.getPhone());
         dto.setStudentId(user.getStudentId());
+        dto.setIdCard(user.getIdCard());
         dto.setAvatarUrl(user.getAvatarUrl());
         dto.setStatus(user.getStatus());
         dto.setCreatedAt(user.getCreatedAt());
