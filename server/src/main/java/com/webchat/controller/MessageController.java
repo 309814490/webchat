@@ -160,4 +160,39 @@ public class MessageController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
+
+    // 全局搜索消息（跨所有用户参与的会话）
+    @GetMapping("/search/global")
+    public ResponseEntity<?> globalSearchMessages(
+            @RequestParam String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        try {
+            Long userId = (Long) authentication.getPrincipal();
+            Page<MessageDTO> messages = messageService.globalSearchMessages(userId, keyword, page, size);
+            return ResponseEntity.ok(messages);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // 全局按类型搜索（图片、文件、视频）
+    @GetMapping("/search/global/type")
+    public ResponseEntity<?> globalSearchByType(
+            @RequestParam List<String> types,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        try {
+            Long userId = (Long) authentication.getPrincipal();
+            List<Message.MessageType> messageTypes = types.stream()
+                    .map(t -> Message.MessageType.valueOf(t.toUpperCase()))
+                    .toList();
+            Page<MessageDTO> messages = messageService.globalSearchByType(userId, messageTypes, page, size);
+            return ResponseEntity.ok(messages);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
 }

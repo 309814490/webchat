@@ -28,7 +28,14 @@
       "Bash(powershell.exe -Command \"Remove-Item -Path ''node_modules\\\\electron'' -Recurse -Force -ErrorAction SilentlyContinue\")",
       "Bash(gh api repos/electron/electron/issues/8200/comments --jq '.[0:3][] | .body')",
       "Bash(npm pack electron@30.0.0 --registry=https://registry.npmmirror.com)",
-      "Bash(findstr :5173)"
+      "Bash(findstr :5173)",
+      "Bash(mvn compile -q)",
+      "Read(//c/Users/wrnie2/.claude/plans/**)",
+      "Bash(mvn clean compile -q)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\wrnie2\\.claude\\projects\\d--workspaces-webchat\\f3347b89-d025-44e5-884b-2e50cbb0fcd3\\tool-results",
+      "C:\\Users\\wrnie2\\.claude\\plans"
     ]
   }
 }

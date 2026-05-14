@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MessageCircle, Users, Settings } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import Messages from './Messages';
@@ -36,17 +36,31 @@ export default function MainLayout() {
   const [showProfileEdit, setShowProfileEdit] = useState(false);
   const [showFriendRequests, setShowFriendRequests] = useState(false);
   const [showGroupList, setShowGroupList] = useState(false);
+  const [conversations, setConversations] = useState<ConversationInfo[]>([]);
+  const conversationsLoadedRef = useRef(false);
+
+  // 加载会话列表（只加载一次）
+  const conversationsRef = useRef<ConversationInfo[]>([]);
+  const loadConversations = useCallback(async (): Promise<ConversationInfo[]> => {
+    if (conversationsLoadedRef.current) return conversationsRef.current;
+    try {
+      const res = await conversationApi.getUserConversations();
+      setConversations(res.data);
+      conversationsRef.current = res.data;
+      conversationsLoadedRef.current = true;
+      return res.data;
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  }, []);
 
   // 默认打开第一个会话
   useEffect(() => {
     const loadFirstConversation = async () => {
-      try {
-        const res = await conversationApi.getUserConversations();
-        if (res.data.length > 0) {
-          handleOpenChat(res.data[0]);
-        }
-      } catch (e) {
-        console.error(e);
+      const convs = await loadConversations();
+      if (convs.length > 0) {
+        handleOpenChat(convs[0]);
       }
     };
     loadFirstConversation();
@@ -57,19 +71,15 @@ export default function MainLayout() {
     { id: 'contacts' as TabId, icon: Users, label: '通讯录' },
   ];
 
-  const handleTabChange = async (tabId: TabId) => {
+  const handleTabChange = useCallback(async (tabId: TabId) => {
     setActiveTab(tabId);
     setShowProfileEdit(false);
     setShowFriendRequests(false);
     setShowGroupList(false);
     if (tabId === 'messages') {
-      try {
-        const res = await conversationApi.getUserConversations();
-        if (res.data.length > 0) {
-          handleOpenChat(res.data[0]);
-        }
-      } catch (e) {
-        console.error(e);
+      // 使用缓存的会话列表，不再重复调用 API
+      if (conversations.length > 0 && !activeChat) {
+        handleOpenChat(conversations[0]);
       }
     } else if (tabId === 'contacts') {
       setActiveChat(null);
@@ -77,9 +87,9 @@ export default function MainLayout() {
     } else {
       setActiveChat(null);
     }
-  };
+  }, [conversations, activeChat]);
 
-  const handleOpenChat = async (conv: ConversationInfo) => {
+  const handleOpenChat = useCallback((conv: ConversationInfo) => {
     const isGroup = conv.type === 'GROUP';
     const friend = isGroup
       ? {
@@ -108,12 +118,13 @@ export default function MainLayout() {
     setShowProfileEdit(false);
     setShowFriendRequests(false);
     setShowGroupList(false);
-  };
+  }, []);
 
-  const handleOpenFriendChat = async (friendInfo: { id: string; username: string; studentId: string | null; avatarUrl: string | null }) => {
+  const handleOpenFriendChat = useCallback(async (friendInfo: { id: string; username: string; studentId: string | null; avatarUrl: string | null }) => {
     try {
-      const conversations = await conversationApi.getUserConversations();
-      const conv = conversations.data.find(
+      // 使用缓存的会话列表
+      const convs = conversations.length > 0 ? conversations : await loadConversations();
+      const conv = convs.find(
         c => c.type === 'PRIVATE' && String(c.otherUserId) === friendInfo.id
       );
       if (conv) {
@@ -137,7 +148,7 @@ export default function MainLayout() {
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [conversations, loadConversations]);
 
   return (
     <div className="flex h-screen bg-white overflow-hidden">
@@ -189,7 +200,26 @@ export default function MainLayout() {
       {/* 中间内容栏 (320px) */}
       <div className="w-[320px] border-r border-gray-200 shrink-0 overflow-hidden">
         {activeTab === 'messages' && (
-          <Messages onOpenChat={handleOpenChat} nameUpdates={nameUpdates} />
+          <Messages onOpenChat={handleOpenChat} nameUpdates={nameUpdates} onOpenFriendChat={handleOpenFriendChat} onOpenGroupChat={(group) => {
+            setActiveChat({
+              conversationId: group.id,
+              type: 'group',
+              friend: {
+                id: String(group.id),
+                username: group.name,
+                email: '',
+                phone: null,
+                studentId: null,
+                idCard: null,
+                avatarUrl: null,
+                status: 'ACTIVE',
+                createdAt: '',
+              },
+            });
+            setShowGroupList(false);
+            setShowFriendRequests(false);
+            setShowProfileEdit(false);
+          }} />
         )}
         {activeTab === 'contacts' && (
           <Contacts onOpenChat={handleOpenFriendChat} onOpenFriendRequests={() => { setShowFriendRequests(true); setShowGroupList(false); setActiveChat(null); setShowProfileEdit(false); }} onOpenGroupList={() => { setShowGroupList(true); setShowFriendRequests(false); setActiveChat(null); setShowProfileEdit(false); }} />

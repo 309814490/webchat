@@ -3,8 +3,9 @@ package com.webchat.service;
 import com.webchat.dto.ConversationDTO;
 import com.webchat.entity.*;
 import com.webchat.repository.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +15,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class ConversationService {
+
+    private static final Logger log = LoggerFactory.getLogger(ConversationService.class);
 
     @Autowired
     private ConversationRepository conversationRepository;
@@ -35,18 +38,11 @@ public class ConversationService {
         List<Conversation> existingList = conversationRepository.findPrivateConversations(userId1, userId2);
 
         if (!existingList.isEmpty()) {
-            // 如果存在多个重复会话，返回第一个（最早创建的）
             if (existingList.size() > 1) {
-                System.out.println("警告: 发现 " + existingList.size() + " 个重复的私聊会话，返回第一个");
+                log.warn("发现 {} 个重复的私聊会话，返回第一个", existingList.size());
             }
             return existingList.get(0);
         }
-
-        // TODO: 生产环境需要启用好友验证
-        // boolean isFriend = friendshipRepository.existsByUserIdAndFriendId(userId1, userId2);
-        // if (!isFriend) {
-        //     throw new RuntimeException("只能与好友创建私聊。请先添加对方为好友。");
-        // }
 
         Conversation conversation = new Conversation();
         conversation.setType(Conversation.ConversationType.PRIVATE);
@@ -57,13 +53,13 @@ public class ConversationService {
         member1.setConversationId(conversation.getId());
         member1.setUserId(userId1);
         member1.setRole(ConversationMember.MemberRole.MEMBER);
-        conversationMemberRepository.save(member1);
 
         ConversationMember member2 = new ConversationMember();
         member2.setConversationId(conversation.getId());
         member2.setUserId(userId2);
         member2.setRole(ConversationMember.MemberRole.MEMBER);
-        conversationMemberRepository.save(member2);
+
+        conversationMemberRepository.saveAll(List.of(member1, member2));
 
         return conversation;
     }
@@ -72,7 +68,6 @@ public class ConversationService {
         List<ConversationMember> memberships = conversationMemberRepository.findByUserId(userId);
         List<ConversationDTO> result = new ArrayList<>();
 
-        // 批量获取所有会话ID
         List<Long> conversationIds = memberships.stream()
                 .map(ConversationMember::getConversationId)
                 .toList();
@@ -81,59 +76,48 @@ public class ConversationService {
             return result;
         }
 
-        // 批量查询所有会话
         List<Conversation> conversations = conversationRepository.findAllById(conversationIds);
         var conversationMap = conversations.stream()
-                .collect(java.util.stream.Collectors.toMap(Conversation::getId, c -> c));
+                .collect(Collectors.toMap(Conversation::getId, c -> c));
 
-        // 批量查询所有会话的最后一条消息
-        var lastMessageMap = new java.util.HashMap<Long, Message>();
-        for (Long convId : conversationIds) {
-            messageRepository.findFirstByConversationIdOrderByCreatedAtDesc(convId)
-                    .ifPresent(msg -> lastMessageMap.put(convId, msg));
+        // 批量获取每个会话的最后一条消息（1次查询替代N次）
+        var lastMessageMap = messageRepository.findLastMessageByConversationIdIn(conversationIds).stream()
+                .collect(Collectors.toMap(Message::getConversationId, m -> m));
+
+        // 批量统计每个会话的未读数（1次查询替代N次）
+        var unreadCountMap = new HashMap<Long, Long>();
+        for (Object[] row : messageRepository.countUnreadByConversationIds(conversationIds, userId)) {
+            unreadCountMap.put((Long) row[0], (Long) row[1]);
         }
 
-        // 批量查询所有会话的成员
         var membersByConvId = conversationMemberRepository.findByConversationIdIn(conversationIds).stream()
-                .collect(java.util.stream.Collectors.groupingBy(ConversationMember::getConversationId));
+                .collect(Collectors.groupingBy(ConversationMember::getConversationId));
 
-        // 批量查询所有相关用户
         var allUserIds = membersByConvId.values().stream()
                 .flatMap(List::stream)
                 .map(ConversationMember::getUserId)
                 .distinct()
                 .toList();
         var userMap = userRepository.findAllById(allUserIds).stream()
-                .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
+                .collect(Collectors.toMap(User::getId, u -> u));
 
         for (ConversationMember membership : memberships) {
             Conversation conversation = conversationMap.get(membership.getConversationId());
             if (conversation == null) continue;
 
-            System.out.println("🔍 处理会话: ID=" + conversation.getId() + ", 类型=" + conversation.getType() + ", 名称=" + conversation.getName());
-
             ConversationDTO dto = new ConversationDTO();
             dto.setId(conversation.getId());
             dto.setType(conversation.getType().name());
+            dto.setPinned(membership.getPinned() != null && membership.getPinned());
 
             Message lastMessage = lastMessageMap.get(conversation.getId());
             if (lastMessage != null) {
-                // 根据消息类型返回友好的文本标签
                 String displayContent = getDisplayContent(lastMessage);
                 dto.setLastMessage(displayContent);
                 dto.setLastMessageTime(lastMessage.getCreatedAt());
             }
 
-            Long unreadCount = 0L;
-            if (membership.getLastReadAt() != null) {
-                unreadCount = messageRepository.countUnreadMessages(conversation.getId(), userId);
-                System.out.println("会话 " + conversation.getId() + " - lastReadAt: " + membership.getLastReadAt() + ", 未读数: " + unreadCount);
-            } else {
-                unreadCount = messageRepository.findByConversationIdOrderByCreatedAtDesc(
-                        conversation.getId(), PageRequest.of(0, Integer.MAX_VALUE)).getTotalElements();
-                System.out.println("会话 " + conversation.getId() + " - lastReadAt 为 null, 总消息数: " + unreadCount);
-            }
-            dto.setUnreadCount(unreadCount);
+            dto.setUnreadCount(unreadCountMap.getOrDefault(conversation.getId(), 0L));
 
             if (conversation.getType() == Conversation.ConversationType.PRIVATE) {
                 List<ConversationMember> members = membersByConvId.get(conversation.getId());
@@ -145,30 +129,29 @@ public class ConversationService {
                                 dto.setOtherUserId(otherUser.getId());
                                 dto.setOtherUsername(otherUser.getUsername());
                                 dto.setOtherStudentId(otherUser.getStudentId());
-                                dto.setName(otherUser.getStudentId()); // 显示学号而不是用户名
+                                dto.setName(otherUser.getStudentId());
                                 dto.setAvatarUrl(otherUser.getAvatarUrl());
                             }
                             break;
                         }
                     }
                 }
-                // 只有私聊且有消息时才添加到结果
                 if (lastMessage != null) {
-                    System.out.println("✅ 添加私聊会话到结果: ID=" + conversation.getId() + ", 名称=" + dto.getName());
                     result.add(dto);
-                } else {
-                    System.out.println("⚠️ 跳过私聊会话（无消息）: ID=" + conversation.getId());
                 }
             } else {
-                // 群组会话：即使没有消息也要显示
                 dto.setName(conversation.getName());
                 dto.setAvatarUrl(conversation.getAvatarUrl());
-                System.out.println("✅ 添加群组会话到结果: ID=" + conversation.getId() + ", 名称=" + dto.getName() + ", 类型=" + conversation.getType());
                 result.add(dto);
             }
         }
 
+        // Sort: pinned first, then by lastMessageTime desc
         result.sort((a, b) -> {
+            boolean aPinned = a.getPinned() != null && a.getPinned();
+            boolean bPinned = b.getPinned() != null && b.getPinned();
+            if (aPinned && !bPinned) return -1;
+            if (!aPinned && bPinned) return 1;
             if (a.getLastMessageTime() == null) return 1;
             if (b.getLastMessageTime() == null) return -1;
             return b.getLastMessageTime().compareTo(a.getLastMessageTime());
@@ -177,9 +160,6 @@ public class ConversationService {
         return result;
     }
 
-    /**
-     * 根据消息类型返回友好的显示内容
-     */
     private String getDisplayContent(Message message) {
         switch (message.getType()) {
             case IMAGE:
@@ -189,7 +169,6 @@ public class ConversationService {
             case FILE:
                 return "[文件]";
             case EMOJI:
-                // 表情包直接显示原始内容（表情符号）
                 return message.getContent();
             case TEXT:
             default:
@@ -201,36 +180,43 @@ public class ConversationService {
     public void markAsRead(Long conversationId, Long userId) {
         ConversationMember member = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
                 .orElseThrow(() -> new RuntimeException("不是会话成员"));
-
-        System.out.println("标记已读 - 会话ID: " + conversationId + ", 用户ID: " + userId);
-        System.out.println("更新前 lastReadAt: " + member.getLastReadAt());
-
         member.setLastReadAt(LocalDateTime.now());
         conversationMemberRepository.save(member);
+    }
 
-        System.out.println("更新后 lastReadAt: " + member.getLastReadAt());
+    @Transactional
+    public void pinConversation(Long conversationId, Long userId) {
+        ConversationMember member = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
+                .orElseThrow(() -> new RuntimeException("不是会话成员"));
+        member.setPinned(true);
+        member.setPinnedAt(LocalDateTime.now());
+        conversationMemberRepository.save(member);
+    }
+
+    @Transactional
+    public void unpinConversation(Long conversationId, Long userId) {
+        ConversationMember member = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
+                .orElseThrow(() -> new RuntimeException("不是会话成员"));
+        member.setPinned(false);
+        member.setPinnedAt(null);
+        conversationMemberRepository.save(member);
     }
 
     public int getConversationMemberCount(Long conversationId) {
-        System.out.println("🔍 获取会话成员数量 - 会话ID: " + conversationId);
-        List<ConversationMember> members = conversationMemberRepository.findByConversationId(conversationId);
-        System.out.println("✅ 会话成员列表: " + members.size() + " 个成员");
-        for (ConversationMember member : members) {
-            System.out.println("  - 用户ID: " + member.getUserId() + ", 角色: " + member.getRole());
-        }
-        return members.size();
+        return (int) conversationMemberRepository.countByConversationId(conversationId);
     }
 
     public List<Map<String, Object>> getConversationMembers(Long conversationId) {
         List<ConversationMember> members = conversationMemberRepository.findByConversationId(conversationId);
+        // 预先建立 Map，避免 O(N²) 的 Stream.filter 嵌套查找
+        Map<Long, ConversationMember> memberMap = members.stream()
+                .collect(Collectors.toMap(ConversationMember::getUserId, m -> m));
+
         List<Long> userIds = members.stream().map(ConversationMember::getUserId).toList();
         var users = userRepository.findAllById(userIds);
 
         return users.stream().map(user -> {
-            var memberInfo = members.stream()
-                .filter(m -> m.getUserId().equals(user.getId()))
-                .findFirst()
-                .orElse(null);
+            var memberInfo = memberMap.get(user.getId());
 
             Map<String, Object> memberData = new HashMap<>();
             memberData.put("id", user.getId());
@@ -240,5 +226,64 @@ public class ConversationService {
             memberData.put("role", memberInfo != null ? memberInfo.getRole().name() : "MEMBER");
             return memberData;
         }).collect(Collectors.toList());
+    }
+
+    public List<Map<String, Object>> getConversationMembersWithPrivacy(Long conversationId, Long requesterId) {
+        List<ConversationMember> members = conversationMemberRepository.findByConversationId(conversationId);
+        // 预先建立 Map，避免 O(N²) 的 Stream.filter 嵌套查找
+        Map<Long, ConversationMember> memberMap = members.stream()
+                .collect(Collectors.toMap(ConversationMember::getUserId, m -> m));
+
+        List<Long> userIds = members.stream().map(ConversationMember::getUserId).toList();
+        var users = userRepository.findAllById(userIds);
+
+        // Check requester's role
+        ConversationMember requesterMember = memberMap.get(requesterId);
+
+        boolean isAdmin = requesterMember != null &&
+                (requesterMember.getRole() == ConversationMember.MemberRole.OWNER ||
+                 requesterMember.getRole() == ConversationMember.MemberRole.ADMIN);
+
+        // Check conversation privacy settings
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        boolean allowViewProfile = conversation != null &&
+                conversation.getAllowMemberViewProfile() != null &&
+                conversation.getAllowMemberViewProfile();
+
+        boolean allowAddFriend = conversation != null &&
+                conversation.getAllowMemberAddFriend() != null &&
+                conversation.getAllowMemberAddFriend();
+
+        return users.stream().map(user -> {
+            var memberInfo = memberMap.get(user.getId());
+
+            Map<String, Object> memberData = new HashMap<>();
+            memberData.put("id", user.getId());
+            memberData.put("username", user.getUsername());
+            memberData.put("studentId", user.getStudentId() != null ? user.getStudentId() : "");
+            memberData.put("avatarUrl", user.getAvatarUrl() != null ? user.getAvatarUrl() : "");
+            memberData.put("role", memberInfo != null ? memberInfo.getRole().name() : "MEMBER");
+
+            if (isAdmin || allowViewProfile || user.getId().equals(requesterId)) {
+                memberData.put("phone", user.getPhone() != null ? user.getPhone() : "");
+                memberData.put("email", user.getEmail() != null ? user.getEmail() : "");
+                memberData.put("canViewProfile", true);
+            } else {
+                memberData.put("canViewProfile", false);
+            }
+
+            memberData.put("canAddFriend", isAdmin || allowAddFriend || user.getId().equals(requesterId));
+
+            return memberData;
+        }).collect(Collectors.toList());
+    }
+
+    public Map<String, Object> getGroupSettings(Long conversationId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("会话不存在"));
+        Map<String, Object> settings = new HashMap<>();
+        settings.put("allowMemberAddFriend", conversation.getAllowMemberAddFriend() != null && conversation.getAllowMemberAddFriend());
+        settings.put("allowMemberViewProfile", conversation.getAllowMemberViewProfile() != null && conversation.getAllowMemberViewProfile());
+        return settings;
     }
 }

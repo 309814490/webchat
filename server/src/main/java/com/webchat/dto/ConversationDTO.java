@@ -16,4 +16,5 @@ public class ConversationDTO {
     private Long otherUserId; // For private conversations
     private String otherUsername; // For private conversations
     private String otherStudentId; // For private conversations - 好友学号
+    private Boolean pinned = false; // 是否置顶
 }

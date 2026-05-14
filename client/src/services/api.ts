@@ -15,6 +15,18 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 export interface LoginParams {
   studentId: string;
   password: string;
@@ -71,7 +83,8 @@ export interface ConversationInfo {
   unreadCount: number;
   otherUserId?: number;
   otherUsername?: string;
-  otherStudentId?: string; // 好友学号
+  otherStudentId?: string;
+  pinned?: boolean;
 }
 
 export interface FriendRequestInfo {
@@ -134,7 +147,6 @@ export const groupApi = {
     api.post<{ message: string }>(`/groups/${groupId}/admins/${userId}`),
   removeAdmin: (groupId: number, userId: number) =>
     api.delete<{ message: string }>(`/groups/${groupId}/admins/${userId}`),
-  // 公告相关
   createAnnouncement: (groupId: number, content: string) =>
     api.post<any>(`/groups/${groupId}/announcements`, { content }),
   getAnnouncements: (groupId: number) =>
@@ -143,6 +155,12 @@ export const groupApi = {
     api.get<any>(`/groups/${groupId}/announcements/latest`),
   deleteAnnouncement: (groupId: number, announcementId: number) =>
     api.delete<{ message: string }>(`/groups/${groupId}/announcements/${announcementId}`),
+  leaveGroup: (groupId: number) =>
+    api.post<{ message: string }>(`/groups/${groupId}/leave`),
+  dissolveGroup: (groupId: number) =>
+    api.post<{ message: string }>(`/groups/${groupId}/dissolve`),
+  updateGroupSettings: (groupId: number, settings: { allowMemberAddFriend?: boolean; allowMemberViewProfile?: boolean }) =>
+    api.put<{ message: string }>(`/groups/${groupId}/settings`, settings),
 };
 
 export const conversationApi = {
@@ -156,6 +174,12 @@ export const conversationApi = {
     api.get<{ count: number }>(`/conversations/${conversationId}/members/count`),
   getConversationMembers: (conversationId: number) =>
     api.get<any[]>(`/conversations/${conversationId}/members`),
+  pinConversation: (conversationId: number) =>
+    api.post<{ message: string }>(`/conversations/${conversationId}/pin`),
+  unpinConversation: (conversationId: number) =>
+    api.post<{ message: string }>(`/conversations/${conversationId}/unpin`),
+  getGroupSettings: (conversationId: number) =>
+    api.get<{ allowMemberAddFriend: boolean; allowMemberViewProfile: boolean }>(`/conversations/${conversationId}/settings`),
 };
 
 export const messageApi = {
@@ -173,6 +197,10 @@ export const messageApi = {
     api.get<any>(`/messages/conversation/${conversationId}/search/sender?senderId=${senderId}&page=${page}&size=${size}`),
   recallMessage: (messageId: number) =>
     api.post<any>(`/messages/${messageId}/recall`),
+  globalSearch: (keyword: string, page: number = 0, size: number = 20) =>
+    api.get<any>(`/messages/search/global?keyword=${encodeURIComponent(keyword)}&page=${page}&size=${size}`),
+  globalSearchByType: (types: string[], page: number = 0, size: number = 20) =>
+    api.get<any>(`/messages/search/global/type?types=${types.join(',')}&page=${page}&size=${size}`),
 };
 
 export const fileApi = {

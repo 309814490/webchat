@@ -299,7 +299,7 @@ export default function ChatHistory({ conversationId, isGroup, onClose }: ChatHi
               className="w-full px-4 py-2 flex items-center gap-2 hover:bg-gray-50 text-left">
               <div className="w-6 h-6 rounded bg-blue-500 flex items-center justify-center text-white text-xs shrink-0 overflow-hidden">
                 {m.avatarUrl
-                  ? <img src={m.avatarUrl} className="w-full h-full object-cover" />
+                  ? <img src={m.avatarUrl} className="w-full h-full object-cover" loading="lazy" />
                   : (m.studentId || m.username || '?').slice(0, 2)
                 }
               </div>
@@ -324,7 +324,7 @@ export default function ChatHistory({ conversationId, isGroup, onClose }: ChatHi
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-7 h-7 rounded bg-blue-500 flex items-center justify-center text-white text-xs shrink-0 overflow-hidden">
                     {msg.senderAvatarUrl
-                      ? <img src={msg.senderAvatarUrl} className="w-full h-full object-cover" />
+                      ? <img src={msg.senderAvatarUrl} className="w-full h-full object-cover" loading="lazy" />
                       : (msg.senderStudentId || msg.senderName || '?').slice(0, 2)
                     }
                   </div>
@@ -334,7 +334,7 @@ export default function ChatHistory({ conversationId, isGroup, onClose }: ChatHi
                 <div className="pl-9">
                   {msg.type === 'IMAGE' || msg.type === 'image' ? (
                     <a href={msg.content} target="_blank" rel="noopener noreferrer" className="block w-32 h-32 rounded overflow-hidden bg-gray-100 hover:opacity-90 transition-opacity">
-                      <img src={msg.content} alt="图片消息" className="w-full h-full object-cover" />
+                      <img src={msg.content} alt="图片消息" className="w-full h-full object-cover" loading="lazy" />
                     </a>
                   ) : msg.type === 'VIDEO' || msg.type === 'video' ? (
                     <a href={msg.content} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800">

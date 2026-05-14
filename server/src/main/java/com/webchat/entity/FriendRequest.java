@@ -8,7 +8,10 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "friend_requests")
+@Table(name = "friend_requests", indexes = {
+    @Index(name = "idx_fr_from_to", columnList = "from_user_id, to_user_id"),
+    @Index(name = "idx_fr_to_status", columnList = "to_user_id, status")
+})
 @Data
 public class FriendRequest {
     @Id

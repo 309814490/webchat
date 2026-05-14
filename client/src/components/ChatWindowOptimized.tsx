@@ -89,7 +89,7 @@ function computeGroupMeta(messages: Message[]): GroupMeta[] {
   return groupMeta;
 }
 
-export default function ChatWindowOptimized({ friend, onClose, isGroup = false, onConversationUpdated }: ChatWindowProps) {
+export default function ChatWindowOptimized({ friend, onClose: _onClose, isGroup = false, onConversationUpdated }: ChatWindowProps) {
   const [message, setMessage] = useState('');
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -182,10 +182,14 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
         // 获取当前用户ID
         const token = localStorage.getItem('token');
         if (token) {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          // JWT token 中用户ID存储在 subject 字段中
-          const userId = Number(payload.sub);
-          setCurrentUserId(userId);
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const userId = Number(payload.sub);
+            setCurrentUserId(userId);
+          } catch {
+            localStorage.removeItem('token');
+            return;
+          }
         }
 
         // 如果是群聊，直接使用 friend.id 作为 conversationId
@@ -267,16 +271,20 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
         Authorization: `Bearer ${token}`,
       },
       reconnectDelay: 5000,
-      debug: (str) => console.log('STOMP:', str),
+      debug: import.meta.env.DEV ? (str) => console.log('STOMP:', str) : () => {},
       onConnect: () => {
         console.log('WebSocket connected');
         client.subscribe(`/topic/conversation/${conversationId}`, (msg) => {
           const incoming = JSON.parse(msg.body) as Message;
           if (incoming.recalled) {
-            // 撤回消息：更新已有消息
-            setMessages((prev) =>
-              prev.map((m) => (m.id === incoming.id ? incoming : m))
-            );
+            // 撤回消息：使用 findIndex 只查找需要更新的消息
+            setMessages((prev) => {
+              const index = prev.findIndex(m => m.id === incoming.id);
+              if (index === -1) return prev;
+              const newMessages = [...prev];
+              newMessages[index] = incoming;
+              return newMessages;
+            });
           } else {
             // 新消息：追加到列表
             setMessages((prev) => [...prev, incoming]);
@@ -298,19 +306,36 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const prevMessagesLenRef = useRef(0);
+  const isUserScrollingRef = useRef(false);
 
+  // 优化自动滚动逻辑 - 使用 useCallback 和更精确的判断
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
-    // 仅在新消息到来时自动滚动（且用户在底部附近）
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+
     const isNewMessage = messages.length > prevMessagesLenRef.current;
-    if (isNearBottom || isNewMessage && prevMessagesLenRef.current === 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const isFirstLoad = prevMessagesLenRef.current === 0;
+
+    // 只在以下情况自动滚动：
+    // 1. 首次加载消息
+    // 2. 新消息到来且用户在底部附近（150px内）
+    if (isFirstLoad) {
+      // 首次加载，直接滚动到底部
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      });
+    } else if (isNewMessage && !isUserScrollingRef.current) {
+      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+      if (isNearBottom) {
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        });
+      }
     }
+
     prevMessagesLenRef.current = messages.length;
   }, [messages]);
 
@@ -340,13 +365,22 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
     }
   };
 
-  // 监听滚动，到顶部时加载更多
+  // 监听滚动，到顶部时加载更多（添加节流优化）
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container || !hasMore || loadingMore) return;
 
+    let isLoadingMore = false;
+    let lastScrollTime = 0;
+    const THROTTLE_MS = 300;
+
     const handleScroll = () => {
-      if (container.scrollTop < 100) {
+      const now = Date.now();
+      if (now - lastScrollTime < THROTTLE_MS) return;
+      lastScrollTime = now;
+
+      if (container.scrollTop < 100 && !isLoadingMore) {
+        isLoadingMore = true;
         // 滚动到顶部附近，加载更多
         const prevScrollHeight = container.scrollHeight;
         loadMessages(currentPage + 1, true).then(() => {
@@ -354,12 +388,15 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
           requestAnimationFrame(() => {
             const newScrollHeight = container.scrollHeight;
             container.scrollTop = newScrollHeight - prevScrollHeight;
+            isLoadingMore = false;
           });
+        }).catch(() => {
+          isLoadingMore = false;
         });
       }
     };
 
-    container.addEventListener('scroll', handleScroll);
+    container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
   }, [conversationId, currentPage, hasMore, loadingMore]);
 
@@ -596,7 +633,7 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
                             <div key={s.id} className={`flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 ${s.participated ? 'bg-gray-50' : 'bg-gray-50 opacity-40'}`}>
                               <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] shrink-0 overflow-hidden ${s.participated ? 'bg-blue-500' : 'bg-gray-400'}`}>
                                 {s.avatarUrl
-                                  ? <img src={s.avatarUrl} alt={s.studentId} className="w-full h-full object-cover" />
+                                  ? <img src={s.avatarUrl} alt={s.studentId} className="w-full h-full object-cover" loading="lazy" />
                                   : s.studentId.slice(0, 2)}
                               </div>
                               <span className={`text-[11px] ${s.participated ? 'text-gray-600' : 'text-gray-400'}`}>{s.studentId}</span>
@@ -625,7 +662,7 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
                   {!isMe && (
                     <div className="w-9 h-9 rounded bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0">
                       {msg.senderAvatarUrl ? (
-                        <img src={msg.senderAvatarUrl} alt={msg.senderName} className="w-full h-full rounded object-cover" />
+                        <img src={msg.senderAvatarUrl} alt={msg.senderName} className="w-full h-full rounded object-cover" loading="lazy" />
                       ) : (
                         <span className="text-xs">{msg.senderStudentId || '?'}</span>
                       )}
@@ -768,7 +805,7 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
                   {isMe && (
                     <div className="w-9 h-9 rounded bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0">
                       {msg.senderAvatarUrl ? (
-                        <img src={msg.senderAvatarUrl} alt={msg.senderName} className="w-full h-full rounded object-cover" />
+                        <img src={msg.senderAvatarUrl} alt={msg.senderName} className="w-full h-full rounded object-cover" loading="lazy" />
                       ) : (
                         <span className="text-xs">{msg.senderStudentId || '我'}</span>
                       )}
@@ -987,7 +1024,7 @@ export default function ChatWindowOptimized({ friend, onClose, isGroup = false, 
       </div>
 
       {/* 群公告页面 */}
-      {isGroup && showAnnouncement && conversationId && (
+      {isGroup && showAnnouncement && conversationId && currentUserId && (
         <GroupAnnouncement
           groupId={conversationId}
           currentUserId={currentUserId}

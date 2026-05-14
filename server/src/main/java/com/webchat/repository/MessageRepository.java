@@ -43,4 +43,28 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     // 按发送者筛选
     @Query("SELECT m FROM Message m WHERE m.conversationId = :conversationId AND m.senderId = :senderId AND m.recalled = false ORDER BY m.createdAt DESC")
     Page<Message> findByConversationIdAndSenderId(@Param("conversationId") Long conversationId, @Param("senderId") Long senderId, Pageable pageable);
+
+    // 全局搜索消息（跨用户所有会话）
+    @Query("SELECT m FROM Message m WHERE m.conversationId IN :conversationIds AND m.content LIKE %:keyword% AND m.recalled = false ORDER BY m.createdAt DESC")
+    Page<Message> globalSearchMessages(@Param("conversationIds") List<Long> conversationIds, @Param("keyword") String keyword, Pageable pageable);
+
+    // 全局按类型搜索
+    @Query("SELECT m FROM Message m WHERE m.conversationId IN :conversationIds AND m.type IN :types AND m.recalled = false ORDER BY m.createdAt DESC")
+    Page<Message> globalSearchByType(@Param("conversationIds") List<Long> conversationIds, @Param("types") List<Message.MessageType> types, Pageable pageable);
+
+    // 批量获取每个会话的最后一条消息（消除 N+1）
+    @Query("SELECT m FROM Message m WHERE m.id IN (" +
+           "  SELECT MAX(m2.id) FROM Message m2 WHERE m2.conversationId IN :conversationIds GROUP BY m2.conversationId" +
+           ")")
+    List<Message> findLastMessageByConversationIdIn(@Param("conversationIds") List<Long> conversationIds);
+
+    // 批量统计每个会话的未读消息数（消除 N+1）
+    @Query("SELECT m.conversationId, COUNT(m) FROM Message m " +
+           "JOIN ConversationMember cm ON cm.conversationId = m.conversationId AND cm.userId = :userId " +
+           "WHERE m.conversationId IN :conversationIds " +
+           "  AND m.senderId <> :userId " +
+           "  AND (cm.lastReadAt IS NULL OR m.createdAt > cm.lastReadAt) " +
+           "GROUP BY m.conversationId")
+    List<Object[]> countUnreadByConversationIds(@Param("conversationIds") List<Long> conversationIds,
+                                                @Param("userId") Long userId);
 }

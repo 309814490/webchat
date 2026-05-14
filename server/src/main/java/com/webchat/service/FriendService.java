@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -95,12 +96,12 @@ public class FriendService {
         Friendship friendship1 = new Friendship();
         friendship1.setUserId(request.getFromUserId());
         friendship1.setFriendId(request.getToUserId());
-        friendshipRepository.save(friendship1);
 
         Friendship friendship2 = new Friendship();
         friendship2.setUserId(request.getToUserId());
         friendship2.setFriendId(request.getFromUserId());
-        friendshipRepository.save(friendship2);
+
+        friendshipRepository.saveAll(List.of(friendship1, friendship2));
     }
 
     @Transactional
@@ -135,9 +136,14 @@ public class FriendService {
     public List<FriendRequestDTO> getPendingRequests(Long userId) {
         List<FriendRequest> requests = friendRequestRepository.findByToUserIdAndStatus(userId, FriendRequest.RequestStatus.PENDING);
 
+        // 批量获取所有发送者信息（消除 N+1）
+        List<Long> fromUserIds = requests.stream().map(FriendRequest::getFromUserId).toList();
+        Map<Long, User> userMap = userRepository.findAllById(fromUserIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
         return requests.stream().map(request -> {
-            User fromUser = userRepository.findById(request.getFromUserId())
-                    .orElseThrow(() -> new RuntimeException("用户不存在"));
+            User fromUser = userMap.get(request.getFromUserId());
+            if (fromUser == null) throw new RuntimeException("用户不存在");
             UserDTO fromUserDTO = UserDTO.fromEntity(fromUser);
             return FriendRequestDTO.fromEntity(request, fromUserDTO);
         }).collect(Collectors.toList());

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, ChevronRight, Plus, Minus, Users } from 'lucide-react';
-import { groupApi, friendApi, UserInfo } from '../services/api';
+import { ArrowLeft, ChevronRight, Plus, Minus, Users, LogOut, Trash2 } from 'lucide-react';
+import { groupApi, friendApi, UserInfo, conversationApi } from '../services/api';
 import GroupQRCode from './GroupQRCode';
 
 interface GroupInfoProps {
@@ -42,6 +42,7 @@ export default function GroupInfo({
   const [loading, setLoading] = useState(false);
   const [friends, setFriends] = useState<UserInfo[]>([]);
   const [selectedFriends, setSelectedFriends] = useState<Set<number>>(new Set());
+  const [groupSettings, setGroupSettings] = useState({ allowMemberAddFriend: false, allowMemberViewProfile: false });
 
   const isAdmin = currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
   const isOwner = currentUserRole === 'OWNER';
@@ -49,6 +50,7 @@ export default function GroupInfo({
 
   useEffect(() => {
     loadAnnouncement();
+    loadGroupSettings();
     const saved = localStorage.getItem(`group_remark_${conversationId}`);
     if (saved) setRemark(saved);
   }, [conversationId]);
@@ -59,6 +61,15 @@ export default function GroupInfo({
       setAnnouncement(res.data.announcement || '');
     } catch {
       // No announcement set yet
+    }
+  };
+
+  const loadGroupSettings = async () => {
+    try {
+      const res = await conversationApi.getGroupSettings(conversationId);
+      setGroupSettings(res.data);
+    } catch {
+      // Use defaults
     }
   };
 
@@ -164,6 +175,48 @@ export default function GroupInfo({
     }
   };
 
+  const handleLeaveGroup = async () => {
+    if (!confirm('确定要退出该群组吗？')) return;
+    setLoading(true);
+    try {
+      await groupApi.leaveGroup(conversationId);
+      alert('已退出群组');
+      onClose();
+      window.location.reload();
+    } catch (error: any) {
+      alert('退出群组失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDissolveGroup = async () => {
+    if (!confirm('确定要解散该群组吗？此操作不可撤销，所有成员都将被移除。')) return;
+    setLoading(true);
+    try {
+      await groupApi.dissolveGroup(conversationId);
+      alert('群组已解散');
+      onClose();
+      window.location.reload();
+    } catch (error: any) {
+      alert('解散群组失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateGroupSettings = async (field: 'allowMemberAddFriend' | 'allowMemberViewProfile', value: boolean) => {
+    setLoading(true);
+    try {
+      await groupApi.updateGroupSettings(conversationId, { [field]: value });
+      setGroupSettings(prev => ({ ...prev, [field]: value }));
+    } catch (error: any) {
+      alert('更新群设置失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // QR Code modal
   if (showQRCode) {
     return <GroupQRCode conversationId={conversationId} groupName={groupName} onClose={() => setShowQRCode(false)} />;
@@ -206,7 +259,7 @@ export default function GroupInfo({
                     className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${selected ? 'bg-blue-50 border-2 border-blue-500' : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'}`}
                   >
                     <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0 overflow-hidden">
-                      {f.avatarUrl ? <img src={f.avatarUrl} className="w-full h-full object-cover" /> : f.username.slice(0, 2)}
+                      {f.avatarUrl ? <img src={f.avatarUrl} className="w-full h-full object-cover" loading="lazy" /> : f.username.slice(0, 2)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900">{f.username}</p>
@@ -244,7 +297,7 @@ export default function GroupInfo({
                 {groupMembers.filter(m => m.id !== currentUserId).map(m => (
                   <div key={m.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                     <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0 overflow-hidden">
-                      {m.avatarUrl ? <img src={m.avatarUrl} className="w-full h-full object-cover" /> : (m.studentId || m.username || '?').slice(0, 2)}
+                      {m.avatarUrl ? <img src={m.avatarUrl} className="w-full h-full object-cover" loading="lazy" /> : (m.studentId || m.username || '?').slice(0, 2)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900">{m.username || m.studentId}</p>
@@ -272,7 +325,7 @@ export default function GroupInfo({
                 {groupMembers.filter(m => m.id !== currentUserId).map(m => (
                   <div key={m.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                     <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0 overflow-hidden">
-                      {m.avatarUrl ? <img src={m.avatarUrl} className="w-full h-full object-cover" /> : (m.studentId || m.username || '?').slice(0, 2)}
+                      {m.avatarUrl ? <img src={m.avatarUrl} className="w-full h-full object-cover" loading="lazy" /> : (m.studentId || m.username || '?').slice(0, 2)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900">{m.username || m.studentId}</p>
@@ -295,6 +348,47 @@ export default function GroupInfo({
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Privacy Settings */}
+          {isAdmin && (
+            <div className="p-4 border-b border-gray-100">
+              <h3 className="text-sm font-medium text-gray-500 mb-3">隐私设置</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">允许群成员互相添加好友</p>
+                    <p className="text-xs text-gray-500 mt-1">关闭后，只有管理员和群主可以添加其他成员为好友</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer ml-3">
+                    <input
+                      type="checkbox"
+                      checked={groupSettings.allowMemberAddFriend}
+                      onChange={(e) => handleUpdateGroupSettings('allowMemberAddFriend', e.target.checked)}
+                      disabled={loading}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">允许群成员查看其他成员信息</p>
+                    <p className="text-xs text-gray-500 mt-1">关闭后，普通成员无法查看其他成员的详细信息</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer ml-3">
+                    <input
+                      type="checkbox"
+                      checked={groupSettings.allowMemberViewProfile}
+                      onChange={(e) => handleUpdateGroupSettings('allowMemberViewProfile', e.target.checked)}
+                      disabled={loading}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
               </div>
             </div>
           )}
@@ -433,7 +527,7 @@ export default function GroupInfo({
                 )}
                 <div className="w-12 h-12 rounded-md bg-blue-500 flex items-center justify-center text-white font-semibold overflow-hidden">
                   {member.avatarUrl ? (
-                    <img src={member.avatarUrl} alt={member.username} className="w-full h-full object-cover" />
+                    <img src={member.avatarUrl} alt={member.username} className="w-full h-full object-cover" loading="lazy" />
                   ) : (
                     <span className="text-sm">{(member.studentId || member.username || '?').slice(0, 2)}</span>
                   )}
@@ -534,6 +628,33 @@ export default function GroupInfo({
               <span className="text-sm text-gray-700">群管理</span>
               <ChevronRight className="w-4 h-4 text-gray-400" />
             </div>
+          )}
+        </div>
+
+        {/* Exit/Dissolve Group Section */}
+        <div className="bg-white mb-2">
+          {/* Exit Group - visible to all members except owner */}
+          {!isOwner && (
+            <button
+              onClick={handleLeaveGroup}
+              disabled={loading}
+              className="w-full px-4 py-3.5 flex items-center justify-center gap-2 text-red-600 hover:bg-red-50 active:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="text-sm font-medium">退出群组</span>
+            </button>
+          )}
+
+          {/* Dissolve Group - visible to admin/owner */}
+          {isAdmin && (
+            <button
+              onClick={handleDissolveGroup}
+              disabled={loading}
+              className="w-full px-4 py-3.5 flex items-center justify-center gap-2 text-red-600 hover:bg-red-50 active:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed border-t border-gray-100"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="text-sm font-medium">解散群组</span>
+            </button>
           )}
         </div>
 

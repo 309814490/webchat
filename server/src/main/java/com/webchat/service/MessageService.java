@@ -92,115 +92,109 @@ public class MessageService {
     }
 
     public Page<MessageDTO> getMessages(Long conversationId, int page, int size) {
+        size = Math.min(size, 100);
         Pageable pageable = PageRequest.of(page, size);
         Page<Message> messagePage = messageRepository.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable);
-
-        // 批量查询所有发送者信息，避免 N+1 查询问题
-        var senderIds = messagePage.getContent().stream()
-                .map(Message::getSenderId)
-                .distinct()
-                .toList();
-
-        var senderMap = userRepository.findAllById(senderIds).stream()
-                .collect(java.util.stream.Collectors.toMap(
-                    user -> user.getId(),
-                    user -> user
-                ));
-
-        // 批量查询所有发送者在该会话中的角色
-        var memberRoleMap = conversationMemberRepository.findByConversationId(conversationId).stream()
-                .collect(java.util.stream.Collectors.toMap(
-                    member -> member.getUserId(),
-                    member -> member.getRole().name()
-                ));
-
-        // 批量查询所有被回复的消息
-        var replyToIds = messagePage.getContent().stream()
-                .map(Message::getReplyToId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
-
-        var replyMessageMap = replyToIds.isEmpty()
-                ? java.util.Collections.<Long, Message>emptyMap()
-                : messageRepository.findAllById(replyToIds).stream()
-                    .collect(java.util.stream.Collectors.toMap(Message::getId, m -> m));
-
-        // 补充被回复消息的发送者信息
-        var replySenderIds = replyMessageMap.values().stream()
-                .map(Message::getSenderId)
-                .filter(id -> !senderMap.containsKey(id))
-                .distinct()
-                .toList();
-        var replySenderMap = new java.util.HashMap<>(senderMap);
-        if (!replySenderIds.isEmpty()) {
-            userRepository.findAllById(replySenderIds).forEach(user -> replySenderMap.put(user.getId(), user));
-        }
-
-        return messagePage.map(message -> convertToDTO(message, replySenderMap, memberRoleMap, replyMessageMap));
+        return convertPageToDTO(conversationId, messagePage);
     }
 
     public Page<MessageDTO> searchMessages(Long conversationId, String keyword, int page, int size) {
+        size = Math.min(size, 100);
         Pageable pageable = PageRequest.of(page, size);
         Page<Message> messagePage = messageRepository.searchMessages(conversationId, keyword, pageable);
-
-        var senderIds = messagePage.getContent().stream()
-                .map(Message::getSenderId)
-                .distinct()
-                .toList();
-
-        var senderMap = userRepository.findAllById(senderIds).stream()
-                .collect(java.util.stream.Collectors.toMap(
-                    user -> user.getId(),
-                    user -> user
-                ));
-
-        var memberRoleMap = conversationMemberRepository.findByConversationId(conversationId).stream()
-                .collect(java.util.stream.Collectors.toMap(
-                    member -> member.getUserId(),
-                    member -> member.getRole().name()
-                ));
-
-        var replyToIds = messagePage.getContent().stream()
-                .map(Message::getReplyToId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
-
-        var replyMessageMap = replyToIds.isEmpty()
-                ? java.util.Collections.<Long, Message>emptyMap()
-                : messageRepository.findAllById(replyToIds).stream()
-                    .collect(java.util.stream.Collectors.toMap(Message::getId, m -> m));
-
-        var replySenderIds = replyMessageMap.values().stream()
-                .map(Message::getSenderId)
-                .filter(id -> !senderMap.containsKey(id))
-                .distinct()
-                .toList();
-        var replySenderMap = new java.util.HashMap<>(senderMap);
-        if (!replySenderIds.isEmpty()) {
-            userRepository.findAllById(replySenderIds).forEach(user -> replySenderMap.put(user.getId(), user));
-        }
-
-        return messagePage.map(message -> convertToDTO(message, replySenderMap, memberRoleMap, replyMessageMap));
+        return convertPageToDTO(conversationId, messagePage);
     }
 
     public Page<MessageDTO> searchByType(Long conversationId, List<Message.MessageType> types, int page, int size) {
+        size = Math.min(size, 100);
         Pageable pageable = PageRequest.of(page, size);
         Page<Message> messagePage = messageRepository.findByConversationIdAndTypeIn(conversationId, types, pageable);
         return convertPageToDTO(conversationId, messagePage);
     }
 
     public Page<MessageDTO> searchByDateRange(Long conversationId, java.time.LocalDateTime startDate, java.time.LocalDateTime endDate, int page, int size) {
+        size = Math.min(size, 100);
         Pageable pageable = PageRequest.of(page, size);
         Page<Message> messagePage = messageRepository.findByConversationIdAndDateRange(conversationId, startDate, endDate, pageable);
         return convertPageToDTO(conversationId, messagePage);
     }
 
     public Page<MessageDTO> searchBySender(Long conversationId, Long senderId, int page, int size) {
+        size = Math.min(size, 100);
         Pageable pageable = PageRequest.of(page, size);
         Page<Message> messagePage = messageRepository.findByConversationIdAndSenderId(conversationId, senderId, pageable);
         return convertPageToDTO(conversationId, messagePage);
+    }
+
+    // 全局搜索消息（跨用户所有会话）
+    public Page<MessageDTO> globalSearchMessages(Long userId, String keyword, int page, int size) {
+        size = Math.min(size, 100);
+        List<Long> conversationIds = conversationMemberRepository.findByUserId(userId).stream()
+                .map(member -> member.getConversationId())
+                .toList();
+        if (conversationIds.isEmpty()) {
+            return Page.empty();
+        }
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Message> messagePage = messageRepository.globalSearchMessages(conversationIds, keyword, pageable);
+        return convertGlobalPageToDTO(messagePage);
+    }
+
+    // 全局按类型搜索
+    public Page<MessageDTO> globalSearchByType(Long userId, List<Message.MessageType> types, int page, int size) {
+        size = Math.min(size, 100);
+        List<Long> conversationIds = conversationMemberRepository.findByUserId(userId).stream()
+                .map(member -> member.getConversationId())
+                .toList();
+        if (conversationIds.isEmpty()) {
+            return Page.empty();
+        }
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Message> messagePage = messageRepository.globalSearchByType(conversationIds, types, pageable);
+        return convertGlobalPageToDTO(messagePage);
+    }
+
+    // 全局搜索的 DTO 转换（不依赖单个 conversationId）
+    private Page<MessageDTO> convertGlobalPageToDTO(Page<Message> messagePage) {
+        var senderIds = messagePage.getContent().stream()
+                .map(Message::getSenderId)
+                .distinct()
+                .toList();
+
+        var senderMap = userRepository.findAllById(senderIds).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    user -> user.getId(),
+                    user -> user
+                ));
+
+        return messagePage.map(message -> {
+            MessageDTO dto = new MessageDTO();
+            dto.setId(message.getId());
+            dto.setConversationId(message.getConversationId());
+            dto.setSenderId(message.getSenderId());
+            dto.setContent(message.getContent());
+            dto.setType(message.getType());
+            dto.setCreatedAt(message.getCreatedAt());
+            dto.setRecalled(message.getRecalled());
+
+            if (message.getMetadata() != null) {
+                try {
+                    dto.setMetadata(objectMapper.readValue(message.getMetadata(),
+                            new TypeReference<Map<String, Object>>() {}));
+                } catch (Exception e) {
+                    dto.setMetadata(null);
+                }
+            }
+
+            var sender = senderMap.get(message.getSenderId());
+            if (sender != null) {
+                dto.setSenderName(sender.getUsername());
+                dto.setSenderStudentId(sender.getStudentId());
+                dto.setSenderAvatarUrl(sender.getAvatarUrl());
+            }
+
+            return dto;
+        });
     }
 
     private Page<MessageDTO> convertPageToDTO(Long conversationId, Page<Message> messagePage) {
@@ -246,44 +240,28 @@ public class MessageService {
     }
 
     private MessageDTO convertToDTO(Message message) {
-        MessageDTO dto = new MessageDTO();
-        dto.setId(message.getId());
-        dto.setConversationId(message.getConversationId());
-        dto.setSenderId(message.getSenderId());
-        dto.setContent(message.getContent());
-        dto.setType(message.getType());
-
-        if (message.getMetadata() != null) {
-            try {
-                dto.setMetadata(objectMapper.readValue(message.getMetadata(),
-                        new TypeReference<Map<String, Object>>() {}));
-            } catch (Exception e) {
-                dto.setMetadata(null);
-            }
+        // 构建单条消息的批量查询 Map，避免 N+1
+        var sender = userRepository.findById(message.getSenderId()).orElse(null);
+        var senderMap = new java.util.HashMap<Long, com.webchat.entity.User>();
+        if (sender != null) {
+            senderMap.put(sender.getId(), sender);
         }
 
-        dto.setCreatedAt(message.getCreatedAt());
-
-        userRepository.findById(message.getSenderId()).ifPresent(user -> {
-            dto.setSenderName(user.getUsername());
-            dto.setSenderStudentId(user.getStudentId());
-            dto.setSenderAvatarUrl(user.getAvatarUrl());
-        });
-
-        // 获取发送者在会话中的角色
+        var memberRoleMap = new java.util.HashMap<Long, String>();
         conversationMemberRepository.findByConversationIdAndUserId(message.getConversationId(), message.getSenderId())
-                .ifPresent(member -> dto.setSenderRole(member.getRole().name()));
+                .ifPresent(member -> memberRoleMap.put(member.getUserId(), member.getRole().name()));
 
-        // 填充回复消息信息
-        populateReplyInfo(dto, message.getReplyToId());
+        var replyMessageMap = new java.util.HashMap<Long, Message>();
+        if (message.getReplyToId() != null) {
+            messageRepository.findById(message.getReplyToId()).ifPresent(replyMsg -> {
+                replyMessageMap.put(replyMsg.getId(), replyMsg);
+                if (!senderMap.containsKey(replyMsg.getSenderId())) {
+                    userRepository.findById(replyMsg.getSenderId()).ifPresent(u -> senderMap.put(u.getId(), u));
+                }
+            });
+        }
 
-        // 填充@提及信息
-        populateMentionInfo(dto);
-
-        // 撤回消息处理
-        maskIfRecalled(dto, message);
-
-        return dto;
+        return convertToDTO(message, senderMap, memberRoleMap, replyMessageMap);
     }
 
     @SuppressWarnings("unchecked")
@@ -302,19 +280,6 @@ public class MessageService {
                     .map(id -> id instanceof Number ? ((Number) id).longValue() : Long.parseLong(id.toString()))
                     .toList());
         }
-    }
-
-    private void populateReplyInfo(MessageDTO dto, Long replyToId) {
-        if (replyToId == null) return;
-        dto.setReplyToId(replyToId);
-        messageRepository.findById(replyToId).ifPresent(replyMsg -> {
-            dto.setReplyToContent(replyMsg.getContent());
-            dto.setReplyToType(replyMsg.getType());
-            userRepository.findById(replyMsg.getSenderId()).ifPresent(user -> {
-                dto.setReplyToSenderName(user.getUsername());
-                dto.setReplyToSenderStudentId(user.getStudentId());
-            });
-        });
     }
 
     private MessageDTO convertToDTO(Message message, java.util.Map<Long, com.webchat.entity.User> senderMap,

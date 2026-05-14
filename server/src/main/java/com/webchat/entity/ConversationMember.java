@@ -31,6 +31,12 @@ public class ConversationMember {
     @Column(name = "last_read_at")
     private LocalDateTime lastReadAt;
 
+    @Column(nullable = false)
+    private Boolean pinned = false;
+
+    @Column(name = "pinned_at")
+    private LocalDateTime pinnedAt;
+
     public enum MemberRole {
         OWNER,
         ADMIN,

@@ -28,6 +28,12 @@ public class Conversation {
     @Column(name = "created_by", nullable = false)
     private Long createdBy;
 
+    @Column(name = "allow_member_add_friend", nullable = false)
+    private Boolean allowMemberAddFriend = false;
+
+    @Column(name = "allow_member_view_profile", nullable = false)
+    private Boolean allowMemberViewProfile = false;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

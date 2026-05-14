@@ -34,6 +34,7 @@ export default function Chat() {
             email: '',
             phone: null,
             studentId: conversation.otherStudentId || null,
+            idCard: null,
             avatarUrl: conversation.avatarUrl || null,
             status: 'ACTIVE',
             createdAt: ''
@@ -46,6 +47,7 @@ export default function Chat() {
             email: '',
             phone: null,
             studentId: null,
+            idCard: null,
             avatarUrl: conversation.avatarUrl || null,
             status: 'ACTIVE',
             createdAt: ''

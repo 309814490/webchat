@@ -6,7 +6,7 @@ interface Props {
   onClose: () => void;
 }
 
-export default function FriendRequestsPanel({ onClose }: Props) {
+export default function FriendRequestsPanel({ onClose: _onClose }: Props) {
   const [requests, setRequests] = useState<FriendRequestInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

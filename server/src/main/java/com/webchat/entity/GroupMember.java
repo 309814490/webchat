@@ -7,7 +7,10 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "group_members")
+@Table(name = "group_members", indexes = {
+    @Index(name = "idx_gm_group_user", columnList = "group_id, user_id", unique = true),
+    @Index(name = "idx_gm_user_id", columnList = "user_id")
+})
 @Data
 public class GroupMember {
     @Id

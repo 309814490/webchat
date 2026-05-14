@@ -2,6 +2,8 @@ package com.webchat.controller;
 
 import com.webchat.dto.FileUploadResponse;
 import com.webchat.service.FileService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -14,6 +16,8 @@ import java.util.Map;
 @RequestMapping("/api/files")
 public class FileController {
 
+    private static final Logger log = LoggerFactory.getLogger(FileController.class);
+
     @Autowired
     private FileService fileService;
 
@@ -24,7 +28,7 @@ public class FileController {
             Authentication authentication) {
         try {
             Long userId = (Long) authentication.getPrincipal();
-            System.out.println("用户 " + userId + " 上传文件: " + file.getOriginalFilename());
+            log.info("用户 {} 上传文件: {}", userId, file.getOriginalFilename());
             FileUploadResponse response = fileService.uploadFile(file, type);
             return ResponseEntity.ok(response);
         } catch (Exception e) {

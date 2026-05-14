@@ -55,12 +55,9 @@ public class GroupController {
     ) {
         try {
             Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
-
-            // 验证用户是否是群组成员
             if (!groupService.isGroupMember(userId, groupId)) {
                 return ResponseEntity.status(403).body(Map.of("message", "无权访问该群组"));
             }
-
             List<GroupMember> members = groupService.getGroupMembers(groupId);
             return ResponseEntity.ok(members);
         } catch (Exception e) {
@@ -140,13 +137,56 @@ public class GroupController {
         try {
             Long currentOwnerId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
             Long newOwnerId = request.get("newOwnerId");
-
             if (newOwnerId == null) {
                 return ResponseEntity.badRequest().body(Map.of("message", "新群主ID不能为空"));
             }
-
             groupService.transferOwner(groupId, newOwnerId, currentOwnerId);
             return ResponseEntity.ok(Map.of("message", "转让群主成功"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{groupId}/leave")
+    public ResponseEntity<?> leaveGroup(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long groupId
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            groupService.leaveGroup(groupId, userId);
+            return ResponseEntity.ok(Map.of("message", "已退出群组"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{groupId}/dissolve")
+    public ResponseEntity<?> dissolveGroup(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long groupId
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            groupService.dissolveGroup(groupId, userId);
+            return ResponseEntity.ok(Map.of("message", "群组已解散"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{groupId}/settings")
+    public ResponseEntity<?> updateGroupSettings(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long groupId,
+            @RequestBody Map<String, Boolean> request
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            Boolean allowAddFriend = request.get("allowMemberAddFriend");
+            Boolean allowViewProfile = request.get("allowMemberViewProfile");
+            groupService.updateGroupSettings(groupId, userId, allowAddFriend, allowViewProfile);
+            return ResponseEntity.ok(Map.of("message", "群设置已更新"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
@@ -177,11 +217,9 @@ public class GroupController {
     ) {
         try {
             Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
-            System.out.println("🔍 Controller: 获取公告请求 - groupId=" + groupId + ", userId=" + userId);
             List<Map<String, Object>> announcements = groupService.getAnnouncements(groupId, userId);
             return ResponseEntity.ok(announcements);
         } catch (Exception e) {
-            System.out.println("❌ Controller: 获取公告失败 - " + e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
