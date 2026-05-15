@@ -85,6 +85,7 @@ export interface ConversationInfo {
   otherUsername?: string;
   otherStudentId?: string;
   pinned?: boolean;
+  muted?: boolean;
 }
 
 export interface FriendRequestInfo {
@@ -113,13 +114,23 @@ export const friendApi = {
   sendFriendRequest: (toUserId: number) =>
     api.post<{ message: string }>('/friends/request', { toUserId }),
   getFriendList: () =>
-    api.get<UserInfo[]>('/friends/list'),
+    api.get<any[]>('/friends/list'),
   getPendingRequests: () =>
     api.get<FriendRequestInfo[]>('/friends/requests/pending'),
   acceptFriendRequest: (requestId: number) =>
     api.post<{ message: string }>(`/friends/request/${requestId}/accept`),
   rejectFriendRequest: (requestId: number) =>
     api.post<{ message: string }>(`/friends/request/${requestId}/reject`),
+  updateRemark: (friendId: number, remark: string) =>
+    api.put<{ message: string }>(`/friends/${friendId}/remark`, { remark }),
+  deleteFriend: (friendId: number) =>
+    api.delete<{ message: string }>(`/friends/${friendId}`),
+  blockUser: (blockedUserId: number) =>
+    api.post<{ message: string }>(`/friends/blacklist/${blockedUserId}`),
+  unblockUser: (blockedUserId: number) =>
+    api.delete<{ message: string }>(`/friends/blacklist/${blockedUserId}`),
+  getBlacklist: () =>
+    api.get<UserInfo[]>('/friends/blacklist'),
 };
 
 export const groupApi = {
@@ -161,6 +172,23 @@ export const groupApi = {
     api.post<{ message: string }>(`/groups/${groupId}/dissolve`),
   updateGroupSettings: (groupId: number, settings: { allowMemberAddFriend?: boolean; allowMemberViewProfile?: boolean }) =>
     api.put<{ message: string }>(`/groups/${groupId}/settings`, settings),
+  muteAll: (conversationId: number, mute: boolean) =>
+    api.post<{ message: string }>(`/groups/${conversationId}/mute-all`, { mute }),
+  muteMember: (conversationId: number, targetUserId: number, minutes: number) =>
+    api.post<{ message: string }>(`/groups/${conversationId}/mute-member`, { targetUserId, minutes }),
+  unmuteMember: (conversationId: number, targetUserId: number) =>
+    api.post<{ message: string }>(`/groups/${conversationId}/unmute-member`, { targetUserId }),
+  uploadGroupFile: (groupId: number, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post<any>(`/groups/${groupId}/files/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  getGroupFiles: (groupId: number) =>
+    api.get<any[]>(`/groups/${groupId}/files`),
+  deleteGroupFile: (groupId: number, fileId: number) =>
+    api.delete<{ message: string }>(`/groups/${groupId}/files/${fileId}`),
 };
 
 export const conversationApi = {
@@ -179,7 +207,13 @@ export const conversationApi = {
   unpinConversation: (conversationId: number) =>
     api.post<{ message: string }>(`/conversations/${conversationId}/unpin`),
   getGroupSettings: (conversationId: number) =>
-    api.get<{ allowMemberAddFriend: boolean; allowMemberViewProfile: boolean }>(`/conversations/${conversationId}/settings`),
+    api.get<{ allowMemberAddFriend: boolean; allowMemberViewProfile: boolean; muteAll: boolean }>(`/conversations/${conversationId}/settings`),
+  muteConversation: (conversationId: number) =>
+    api.post<{ message: string }>(`/conversations/${conversationId}/mute`),
+  unmuteConversation: (conversationId: number) =>
+    api.post<{ message: string }>(`/conversations/${conversationId}/unmute`),
+  hideConversation: (conversationId: number) =>
+    api.post<{ message: string }>(`/conversations/${conversationId}/hide`),
 };
 
 export const messageApi = {
@@ -201,6 +235,14 @@ export const messageApi = {
     api.get<any>(`/messages/search/global?keyword=${encodeURIComponent(keyword)}&page=${page}&size=${size}`),
   globalSearchByType: (types: string[], page: number = 0, size: number = 20) =>
     api.get<any>(`/messages/search/global/type?types=${types.join(',')}&page=${page}&size=${size}`),
+  forwardMessage: (messageId: number, conversationIds: number[]) =>
+    api.post<any>(`/messages/${messageId}/forward`, { conversationIds }),
+  favoriteMessage: (messageId: number) =>
+    api.post<{ message: string }>(`/messages/${messageId}/favorite`),
+  removeFavorite: (favoriteId: number) =>
+    api.delete<{ message: string }>(`/messages/favorites/${favoriteId}`),
+  getFavorites: (page: number = 0, size: number = 20) =>
+    api.get<any>(`/messages/favorites?page=${page}&size=${size}`),
 };
 
 export const fileApi = {
@@ -227,6 +269,10 @@ export const userApi = {
     api.put<UserInfo>('/user/profile', data),
   updatePassword: (data: { oldPassword: string; newPassword: string }) =>
     api.put<{ message: string }>('/user/password', data),
+  getSettings: () =>
+    api.get<any>('/user/settings'),
+  updateSettings: (data: { notificationEnabled?: boolean; notificationSound?: boolean; notificationVibrate?: boolean; notificationPreview?: boolean }) =>
+    api.put<any>('/user/settings', data),
 };
 
 export default api;

@@ -50,6 +50,7 @@ public class Message {
         IMAGE,
         FILE,
         VIDEO,
+        VOICE,
         EMOJI
     }
 }

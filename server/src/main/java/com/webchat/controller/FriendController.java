@@ -78,7 +78,7 @@ public class FriendController {
     public ResponseEntity<?> getFriendList(@RequestHeader("Authorization") String token) {
         try {
             Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
-            List<UserDTO> friends = friendService.getFriendList(userId);
+            var friends = friendService.getFriendListWithRemark(userId);
             return ResponseEntity.ok(friends);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -90,6 +90,73 @@ public class FriendController {
         try {
             Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
             return ResponseEntity.ok(friendService.getPendingRequests(userId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{friendId}/remark")
+    public ResponseEntity<?> updateRemark(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long friendId,
+            @RequestBody Map<String, String> body
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            friendService.updateRemark(userId, friendId, body.get("remark"));
+            return ResponseEntity.ok(Map.of("message", "备注已更新"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{friendId}")
+    public ResponseEntity<?> deleteFriend(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long friendId
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            friendService.deleteFriend(userId, friendId);
+            return ResponseEntity.ok(Map.of("message", "已删除好友"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/blacklist/{blockedUserId}")
+    public ResponseEntity<?> blockUser(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long blockedUserId
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            friendService.blockUser(userId, blockedUserId);
+            return ResponseEntity.ok(Map.of("message", "已加入黑名单"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/blacklist/{blockedUserId}")
+    public ResponseEntity<?> unblockUser(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long blockedUserId
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            friendService.unblockUser(userId, blockedUserId);
+            return ResponseEntity.ok(Map.of("message", "已移出黑名单"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/blacklist")
+    public ResponseEntity<?> getBlacklist(@RequestHeader("Authorization") String token) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            return ResponseEntity.ok(friendService.getBlacklist(userId));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }

@@ -4,6 +4,7 @@ import com.webchat.dto.MessageDTO;
 import com.webchat.dto.SendMessageRequest;
 import com.webchat.entity.Message;
 import com.webchat.service.MessageService;
+import com.webchat.service.MessageFavoriteService;
 import com.webchat.util.PermissionValidator;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +25,9 @@ public class MessageController {
 
     @Autowired
     private MessageService messageService;
+
+    @Autowired
+    private MessageFavoriteService messageFavoriteService;
 
     @Autowired
     private PermissionValidator permissionValidator;
@@ -191,6 +195,67 @@ public class MessageController {
                     .toList();
             Page<MessageDTO> messages = messageService.globalSearchByType(userId, messageTypes, page, size);
             return ResponseEntity.ok(messages);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // 消息转发
+    @PostMapping("/{messageId}/forward")
+    public ResponseEntity<?> forwardMessage(
+            @PathVariable Long messageId,
+            @RequestBody Map<String, List<Long>> body,
+            Authentication authentication) {
+        try {
+            Long userId = (Long) authentication.getPrincipal();
+            List<Long> targetConversationIds = body.get("conversationIds");
+            if (targetConversationIds == null || targetConversationIds.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "目标会话不能为空"));
+            }
+            List<MessageDTO> results = messageService.forwardMessage(messageId, userId, targetConversationIds);
+            return ResponseEntity.ok(results);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // 消息收藏
+    @PostMapping("/{messageId}/favorite")
+    public ResponseEntity<?> favoriteMessage(
+            @PathVariable Long messageId,
+            Authentication authentication) {
+        try {
+            Long userId = (Long) authentication.getPrincipal();
+            messageFavoriteService.addFavorite(userId, messageId);
+            return ResponseEntity.ok(Map.of("message", "已收藏"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/favorites/{favoriteId}")
+    public ResponseEntity<?> removeFavorite(
+            @PathVariable Long favoriteId,
+            Authentication authentication) {
+        try {
+            Long userId = (Long) authentication.getPrincipal();
+            messageFavoriteService.removeFavorite(userId, favoriteId);
+            return ResponseEntity.ok(Map.of("message", "已取消收藏"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/favorites")
+    public ResponseEntity<?> getFavorites(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        try {
+            Long userId = (Long) authentication.getPrincipal();
+            return ResponseEntity.ok(messageFavoriteService.getFavorites(userId, page, size));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }

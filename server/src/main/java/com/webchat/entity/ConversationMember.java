@@ -37,6 +37,18 @@ public class ConversationMember {
     @Column(name = "pinned_at")
     private LocalDateTime pinnedAt;
 
+    @Column(nullable = false)
+    private Boolean muted = false;
+
+    @Column(nullable = false)
+    private Boolean hidden = false;
+
+    @Column(name = "muted_until")
+    private LocalDateTime mutedUntil;
+
+    @Column(name = "group_nickname", length = 50)
+    private String groupNickname;
+
     public enum MemberRole {
         OWNER,
         ADMIN,

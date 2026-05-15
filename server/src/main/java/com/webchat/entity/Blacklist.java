@@ -7,12 +7,11 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "friendships", indexes = {
-    @Index(name = "idx_friendship_user_friend", columnList = "user_id, friend_id", unique = true),
-    @Index(name = "idx_friendship_friend_id", columnList = "friend_id")
+@Table(name = "blacklist", indexes = {
+    @Index(name = "idx_blacklist_user_blocked", columnList = "user_id, blocked_user_id", unique = true)
 })
 @Data
-public class Friendship {
+public class Blacklist {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -20,11 +19,8 @@ public class Friendship {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(name = "friend_id", nullable = false)
-    private Long friendId;
-
-    @Column(length = 50)
-    private String remark;
+    @Column(name = "blocked_user_id", nullable = false)
+    private Long blockedUserId;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

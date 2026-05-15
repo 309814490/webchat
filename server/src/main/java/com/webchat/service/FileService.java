@@ -24,6 +24,7 @@ public class FileService {
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
             ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
             ".mp4", ".avi", ".mov", ".mkv", ".webm",
+            ".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac",
             ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
             ".txt", ".zip", ".rar", ".7z"
     );

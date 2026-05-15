@@ -34,6 +34,9 @@ public class Conversation {
     @Column(name = "allow_member_view_profile", nullable = false)
     private Boolean allowMemberViewProfile = false;
 
+    @Column(name = "mute_all", nullable = false)
+    private Boolean muteAll = false;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

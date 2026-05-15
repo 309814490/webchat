@@ -68,6 +68,11 @@ public class ConversationService {
         List<ConversationMember> memberships = conversationMemberRepository.findByUserId(userId);
         List<ConversationDTO> result = new ArrayList<>();
 
+        // 过滤掉已隐藏的会话
+        memberships = memberships.stream()
+                .filter(m -> !Boolean.TRUE.equals(m.getHidden()))
+                .toList();
+
         List<Long> conversationIds = memberships.stream()
                 .map(ConversationMember::getConversationId)
                 .toList();
@@ -109,6 +114,7 @@ public class ConversationService {
             dto.setId(conversation.getId());
             dto.setType(conversation.getType().name());
             dto.setPinned(membership.getPinned() != null && membership.getPinned());
+            dto.setMuted(membership.getMuted() != null && membership.getMuted());
 
             Message lastMessage = lastMessageMap.get(conversation.getId());
             if (lastMessage != null) {
@@ -284,6 +290,43 @@ public class ConversationService {
         Map<String, Object> settings = new HashMap<>();
         settings.put("allowMemberAddFriend", conversation.getAllowMemberAddFriend() != null && conversation.getAllowMemberAddFriend());
         settings.put("allowMemberViewProfile", conversation.getAllowMemberViewProfile() != null && conversation.getAllowMemberViewProfile());
+        settings.put("muteAll", conversation.getMuteAll() != null && conversation.getMuteAll());
         return settings;
+    }
+
+    // ===== 会话免打扰 =====
+
+    @Transactional
+    public void muteConversation(Long conversationId, Long userId) {
+        ConversationMember member = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
+                .orElseThrow(() -> new RuntimeException("不是会话成员"));
+        member.setMuted(true);
+        conversationMemberRepository.save(member);
+    }
+
+    @Transactional
+    public void unmuteConversation(Long conversationId, Long userId) {
+        ConversationMember member = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
+                .orElseThrow(() -> new RuntimeException("不是会话成员"));
+        member.setMuted(false);
+        conversationMemberRepository.save(member);
+    }
+
+    // ===== 会话删除（隐藏） =====
+
+    @Transactional
+    public void hideConversation(Long conversationId, Long userId) {
+        ConversationMember member = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
+                .orElseThrow(() -> new RuntimeException("不是会话成员"));
+        member.setHidden(true);
+        conversationMemberRepository.save(member);
+    }
+
+    @Transactional
+    public void unhideConversation(Long conversationId, Long userId) {
+        ConversationMember member = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
+                .orElseThrow(() -> new RuntimeException("不是会话成员"));
+        member.setHidden(false);
+        conversationMemberRepository.save(member);
     }
 }

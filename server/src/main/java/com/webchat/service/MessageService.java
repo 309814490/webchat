@@ -6,6 +6,10 @@ import com.webchat.entity.Message;
 import com.webchat.repository.MessageRepository;
 import com.webchat.repository.UserRepository;
 import com.webchat.repository.ConversationMemberRepository;
+import com.webchat.repository.BlacklistRepository;
+import com.webchat.repository.ConversationRepository;
+import com.webchat.entity.Conversation;
+import com.webchat.entity.ConversationMember;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,19 +36,58 @@ public class MessageService {
     private ConversationMemberRepository conversationMemberRepository;
 
     @Autowired
+    private BlacklistRepository blacklistRepository;
+
+    @Autowired
+    private ConversationRepository conversationRepository;
+
+    @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
     public MessageDTO sendMessage(Long senderId, SendMessageRequest request) {
+        // 检查群禁言
+        Conversation conversation = conversationRepository.findById(request.getConversationId()).orElse(null);
+        if (conversation != null && conversation.getType() == Conversation.ConversationType.GROUP) {
+            var senderMember = conversationMemberRepository
+                    .findByConversationIdAndUserId(request.getConversationId(), senderId)
+                    .orElseThrow(() -> new SecurityException("无权访问该会话"));
+
+            // 全员禁言检查（群主和管理员不受限制）
+            if (Boolean.TRUE.equals(conversation.getMuteAll())
+                    && senderMember.getRole() == ConversationMember.MemberRole.MEMBER) {
+                throw new RuntimeException("当前群组已开启全员禁言");
+            }
+
+            // 个人禁言检查
+            if (senderMember.getMutedUntil() != null
+                    && senderMember.getMutedUntil().isAfter(java.time.LocalDateTime.now())) {
+                throw new RuntimeException("您已被禁言，无法发送消息");
+            }
+        }
+
+        // 私聊黑名单检查
+        if (conversation != null && conversation.getType() == Conversation.ConversationType.PRIVATE) {
+            var members = conversationMemberRepository.findByConversationId(request.getConversationId());
+            for (var m : members) {
+                if (!m.getUserId().equals(senderId)) {
+                    if (blacklistRepository.existsByUserIdAndBlockedUserId(m.getUserId(), senderId)) {
+                        throw new RuntimeException("消息发送失败");
+                    }
+                    break;
+                }
+            }
+        }
+
         // 验证@所有人权限：只有群主或管理员可以@所有人
         if (request.isMentionAll()) {
             var member = conversationMemberRepository
                     .findByConversationIdAndUserId(request.getConversationId(), senderId)
                     .orElseThrow(() -> new SecurityException("无权访问该会话"));
-            if (member.getRole() != com.webchat.entity.ConversationMember.MemberRole.OWNER
-                    && member.getRole() != com.webchat.entity.ConversationMember.MemberRole.ADMIN) {
+            if (member.getRole() != ConversationMember.MemberRole.OWNER
+                    && member.getRole() != ConversationMember.MemberRole.ADMIN) {
                 throw new SecurityException("只有群主或管理员可以@所有人");
             }
         }
@@ -396,5 +439,55 @@ public class MessageService {
         );
 
         return dto;
+    }
+
+    // ===== 消息转发 =====
+
+    @Transactional
+    public List<MessageDTO> forwardMessage(Long messageId, Long senderId, List<Long> targetConversationIds) {
+        Message original = messageRepository.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("消息不存在"));
+
+        if (Boolean.TRUE.equals(original.getRecalled())) {
+            throw new RuntimeException("已撤回的消息不能转发");
+        }
+
+        List<MessageDTO> results = new java.util.ArrayList<>();
+        for (Long targetConversationId : targetConversationIds) {
+            // 验证发送者是目标会话成员
+            if (!conversationMemberRepository.existsByConversationIdAndUserId(targetConversationId, senderId)) {
+                continue;
+            }
+
+            Message forwarded = new Message();
+            forwarded.setConversationId(targetConversationId);
+            forwarded.setSenderId(senderId);
+            forwarded.setContent(original.getContent());
+            forwarded.setType(original.getType());
+
+            // 在 metadata 中标记为转发消息
+            Map<String, Object> forwardMeta = new java.util.HashMap<>();
+            if (original.getMetadata() != null) {
+                try {
+                    forwardMeta.putAll(objectMapper.readValue(original.getMetadata(),
+                            new TypeReference<Map<String, Object>>() {}));
+                } catch (Exception ignored) {}
+            }
+            forwardMeta.put("forwarded", true);
+            forwardMeta.put("originalMessageId", original.getId());
+            try {
+                forwarded.setMetadata(objectMapper.writeValueAsString(forwardMeta));
+            } catch (Exception ignored) {}
+
+            forwarded = messageRepository.save(forwarded);
+            MessageDTO dto = convertToDTO(forwarded);
+
+            messagingTemplate.convertAndSend(
+                    "/topic/conversation/" + targetConversationId,
+                    dto
+            );
+            results.add(dto);
+        }
+        return results;
     }
 }

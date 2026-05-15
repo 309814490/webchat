@@ -435,4 +435,65 @@ public class GroupService {
         }
         conversationRepository.save(conversation);
     }
+
+    // ===== 群禁言 =====
+
+    @Transactional
+    public void muteAll(Long conversationId, Long userId, boolean mute) {
+        ConversationMember member = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
+                .orElseThrow(() -> new RuntimeException("您不是群组成员"));
+
+        if (member.getRole() != ConversationMember.MemberRole.OWNER &&
+            member.getRole() != ConversationMember.MemberRole.ADMIN) {
+            throw new RuntimeException("只有群主或管理员可以设置全员禁言");
+        }
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("会话不存在"));
+        conversation.setMuteAll(mute);
+        conversationRepository.save(conversation);
+    }
+
+    @Transactional
+    public void muteMember(Long conversationId, Long operatorId, Long targetUserId, int minutes) {
+        ConversationMember operator = conversationMemberRepository.findByConversationIdAndUserId(conversationId, operatorId)
+                .orElseThrow(() -> new RuntimeException("您不是群组成员"));
+
+        if (operator.getRole() != ConversationMember.MemberRole.OWNER &&
+            operator.getRole() != ConversationMember.MemberRole.ADMIN) {
+            throw new RuntimeException("只有群主或管理员可以禁言成员");
+        }
+
+        ConversationMember target = conversationMemberRepository.findByConversationIdAndUserId(conversationId, targetUserId)
+                .orElseThrow(() -> new RuntimeException("目标用户不是群成员"));
+
+        // 不能禁言群主或同级管理员
+        if (target.getRole() == ConversationMember.MemberRole.OWNER) {
+            throw new RuntimeException("不能禁言群主");
+        }
+        if (target.getRole() == ConversationMember.MemberRole.ADMIN &&
+            operator.getRole() != ConversationMember.MemberRole.OWNER) {
+            throw new RuntimeException("只有群主可以禁言管理员");
+        }
+
+        target.setMutedUntil(LocalDateTime.now().plusMinutes(minutes));
+        conversationMemberRepository.save(target);
+    }
+
+    @Transactional
+    public void unmuteMember(Long conversationId, Long operatorId, Long targetUserId) {
+        ConversationMember operator = conversationMemberRepository.findByConversationIdAndUserId(conversationId, operatorId)
+                .orElseThrow(() -> new RuntimeException("您不是群组成员"));
+
+        if (operator.getRole() != ConversationMember.MemberRole.OWNER &&
+            operator.getRole() != ConversationMember.MemberRole.ADMIN) {
+            throw new RuntimeException("只有群主或管理员可以解除禁言");
+        }
+
+        ConversationMember target = conversationMemberRepository.findByConversationIdAndUserId(conversationId, targetUserId)
+                .orElseThrow(() -> new RuntimeException("目标用户不是群成员"));
+
+        target.setMutedUntil(null);
+        conversationMemberRepository.save(target);
+    }
 }

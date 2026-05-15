@@ -252,4 +252,53 @@ public class GroupController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
+
+    @PostMapping("/{conversationId}/mute-all")
+    public ResponseEntity<?> muteAll(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long conversationId,
+            @RequestBody Map<String, Boolean> body
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            boolean mute = body.getOrDefault("mute", true);
+            groupService.muteAll(conversationId, userId, mute);
+            return ResponseEntity.ok(Map.of("message", mute ? "已开启全员禁言" : "已关闭全员禁言"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{conversationId}/mute-member")
+    public ResponseEntity<?> muteMember(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long conversationId,
+            @RequestBody Map<String, Object> body
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            Long targetUserId = Long.valueOf(body.get("targetUserId").toString());
+            int minutes = Integer.parseInt(body.getOrDefault("minutes", 10).toString());
+            groupService.muteMember(conversationId, userId, targetUserId, minutes);
+            return ResponseEntity.ok(Map.of("message", "已禁言该成员"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{conversationId}/unmute-member")
+    public ResponseEntity<?> unmuteMember(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long conversationId,
+            @RequestBody Map<String, Long> body
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            Long targetUserId = body.get("targetUserId");
+            groupService.unmuteMember(conversationId, userId, targetUserId);
+            return ResponseEntity.ok(Map.of("message", "已解除禁言"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
 }

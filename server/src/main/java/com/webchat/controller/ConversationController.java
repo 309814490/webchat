@@ -151,4 +151,55 @@ public class ConversationController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
+
+    @PostMapping("/{conversationId}/mute")
+    public ResponseEntity<?> muteConversation(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long conversationId
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            permissionValidator.validateConversationMember(userId, conversationId);
+            conversationService.muteConversation(conversationId, userId);
+            return ResponseEntity.ok(Map.of("message", "已开启免打扰"));
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{conversationId}/unmute")
+    public ResponseEntity<?> unmuteConversation(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long conversationId
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            permissionValidator.validateConversationMember(userId, conversationId);
+            conversationService.unmuteConversation(conversationId, userId);
+            return ResponseEntity.ok(Map.of("message", "已关闭免打扰"));
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{conversationId}/hide")
+    public ResponseEntity<?> hideConversation(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long conversationId
+    ) {
+        try {
+            Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
+            permissionValidator.validateConversationMember(userId, conversationId);
+            conversationService.hideConversation(conversationId, userId);
+            return ResponseEntity.ok(Map.of("message", "已删除会话"));
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
 }

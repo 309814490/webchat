@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { Reply, Smile } from 'lucide-react';
+import { Reply, Smile, Forward, Star } from 'lucide-react';
 import { messageApi } from '../services/api';
 
 interface Message {
@@ -30,6 +30,7 @@ interface MessageItemProps {
   conversationId: number;
   onReply: (msg: Message) => void;
   onRecall: (msgId: number) => void;
+  onForward?: (msg: Message) => void;
   formatMessageTime: (timeStr: string) => string;
 }
 
@@ -40,6 +41,7 @@ const MessageItem = memo(({
   conversationId,
   onReply,
   onRecall,
+  onForward,
   formatMessageTime
 }: MessageItemProps) => {
 
@@ -57,6 +59,15 @@ const MessageItem = memo(({
       alert('发送消息失败: ' + (error.response?.data?.message || error.message));
     }
   }, [conversationId, msg.content, msg.type, msg.metadata]);
+
+  const handleFavorite = useCallback(async () => {
+    try {
+      await messageApi.favoriteMessage(msg.id);
+      alert('已收藏');
+    } catch (error: any) {
+      alert(error.response?.data?.message || '收藏失败');
+    }
+  }, [msg.id]);
 
   if (msg.recalled) {
     return (
@@ -155,6 +166,20 @@ const MessageItem = memo(({
               title="+1"
             >
               <Smile className="w-3 h-3 text-gray-600" />
+            </button>
+            <button
+              onClick={() => onForward?.(msg)}
+              className="p-1 bg-white rounded-full shadow hover:bg-gray-100"
+              title="转发"
+            >
+              <Forward className="w-3 h-3 text-gray-600" />
+            </button>
+            <button
+              onClick={handleFavorite}
+              className="p-1 bg-white rounded-full shadow hover:bg-gray-100"
+              title="收藏"
+            >
+              <Star className="w-3 h-3 text-gray-600" />
             </button>
             {isMe && (
               <button

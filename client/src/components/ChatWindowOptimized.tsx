@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Smile, Plus, Reply, X, AtSign, Bell, MessageSquare, Settings } from 'lucide-react';
+import { Smile, Plus, Reply, X, AtSign, Bell, MessageSquare, Settings, Forward, Star, Mic } from 'lucide-react';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { conversationApi, messageApi, fileApi, UserInfo, groupApi } from '../services/api';
@@ -9,6 +9,9 @@ import MentionSelector from './MentionSelector';
 import GroupInfo from './GroupInfo';
 import GroupAnnouncement from './GroupAnnouncement';
 import ChatHistory from './ChatHistory';
+import VoiceRecorder from './VoiceRecorder';
+import VoicePlayer from './VoicePlayer';
+import { notificationService } from '../services/notificationService';
 
 interface ChatWindowProps {
   friend: UserInfo;
@@ -111,6 +114,9 @@ export default function ChatWindowOptimized({ friend, onClose: _onClose, isGroup
   const [groupName, setGroupName] = useState(friend.username);
   const [latestAnnouncement, setLatestAnnouncement] = useState<any>(null);
   const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState<number | null>(null);
+  const [forwardingMsg, setForwardingMsg] = useState<Message | null>(null);
+  const [forwardConversations, setForwardConversations] = useState<any[]>([]);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
 
   // 无限滚动状态
   const [currentPage, setCurrentPage] = useState(0);
@@ -288,6 +294,24 @@ export default function ChatWindowOptimized({ friend, onClose: _onClose, isGroup
           } else {
             // 新消息：追加到列表
             setMessages((prev) => [...prev, incoming]);
+
+            // 如果不是自己发送的消息，显示通知
+            if (incoming.senderId !== currentUserId) {
+              const messagePreview = incoming.type === 'TEXT' ? incoming.content :
+                incoming.type === 'IMAGE' ? '[图片]' :
+                incoming.type === 'VIDEO' ? '[视频]' :
+                incoming.type === 'VOICE' ? '[语音]' :
+                incoming.type === 'FILE' ? '[文件]' : '[消息]';
+
+              notificationService.showNotification(
+                incoming.senderName || incoming.senderStudentId || '新消息',
+                {
+                  body: messagePreview,
+                  tag: `conversation-${conversationId}`,
+                  data: { conversationId, messageId: incoming.id }
+                }
+              );
+            }
           }
         });
       },
@@ -455,6 +479,38 @@ export default function ChatWindowOptimized({ friend, onClose: _onClose, isGroup
     }
   };
 
+  const handleVoiceSend = async (audioBlob: Blob, duration: number) => {
+    if (!conversationId) return;
+
+    setLoading(true);
+    try {
+      // 将 Blob 转换为 File
+      const audioFile = new File([audioBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' });
+
+      // 上传音频文件
+      const uploadResponse = await fileApi.uploadFile(audioFile, 'VOICE');
+
+      // 发送语音消息
+      await messageApi.sendMessage({
+        conversationId,
+        content: uploadResponse.data.url,
+        type: 'VOICE',
+        metadata: {
+          fileName: uploadResponse.data.fileName,
+          fileSize: uploadResponse.data.fileSize,
+          duration: duration,
+        }
+      });
+
+      setShowVoiceRecorder(false);
+    } catch (error: any) {
+      console.error('Failed to send voice message:', error);
+      alert('语音消息发送失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   // 群设置页面：独立页面渲染
   if (isGroup && showGroupInfo && conversationId) {
@@ -607,6 +663,7 @@ export default function ChatWindowOptimized({ friend, onClose: _onClose, isGroup
                           {msg.type === 'IMAGE' || msg.type === 'image' ? '[图片]'
                             : msg.type === 'VIDEO' || msg.type === 'video' ? '[视频]'
                             : msg.type === 'FILE' || msg.type === 'file' ? '[文件]'
+                            : msg.type === 'VOICE' || msg.type === 'voice' ? '[语音]'
                             : msg.content}
                         </p>
                       </div>
@@ -749,6 +806,14 @@ export default function ChatWindowOptimized({ friend, onClose: _onClose, isGroup
                           </p>
                         </div>
                       </a>
+                    ) : (msg.type === 'VOICE' || msg.type === 'voice') ? (
+                      <div className={`${isMe ? 'bg-[#95ec69]' : 'bg-white'} rounded-lg p-3 shadow min-w-[200px]`}>
+                        <VoicePlayer
+                          audioUrl={msg.content}
+                          duration={msg.metadata?.duration}
+                          isMe={isMe}
+                        />
+                      </div>
                     ) : (
                       <div className={`${isMe ? 'bg-[#95ec69]' : 'bg-white'} rounded p-2.5 shadow-sm`}>
                         <p className="text-sm break-words text-gray-900">
@@ -801,6 +866,41 @@ export default function ChatWindowOptimized({ friend, onClose: _onClose, isGroup
                         </button>
                       );
                     })()}
+                    {/* 转发按钮 */}
+                    {!msg.recalled && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await conversationApi.getUserConversations();
+                          setForwardConversations(res.data.filter((c: any) => c.id !== conversationId));
+                          setForwardingMsg(msg);
+                        } catch (e) { console.error(e); }
+                      }}
+                      className={`opacity-0 group-hover:opacity-100 transition-opacity mt-1 bg-white border border-gray-300 rounded-full px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 shadow-sm flex items-center gap-0.5 ${isMe ? 'self-end' : 'self-start'}`}
+                      title="转发"
+                    >
+                      <Forward className="w-3 h-3" />
+                      <span>转发</span>
+                    </button>
+                    )}
+                    {/* 收藏按钮 */}
+                    {!msg.recalled && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await messageApi.favoriteMessage(msg.id);
+                          alert('已收藏');
+                        } catch (error: any) {
+                          alert(error.response?.data?.message || '收藏失败');
+                        }
+                      }}
+                      className={`opacity-0 group-hover:opacity-100 transition-opacity mt-1 bg-white border border-gray-300 rounded-full px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 shadow-sm flex items-center gap-0.5 ${isMe ? 'self-end' : 'self-start'}`}
+                      title="收藏"
+                    >
+                      <Star className="w-3 h-3" />
+                      <span>收藏</span>
+                    </button>
+                    )}
                   </div>
                   {isMe && (
                     <div className="w-9 h-9 rounded bg-blue-500 flex items-center justify-center text-white font-semibold shrink-0">
@@ -945,6 +1045,13 @@ export default function ChatWindowOptimized({ friend, onClose: _onClose, isGroup
                 />
               )}
             </div>
+            <button
+              className="p-1.5 hover:bg-black/5 rounded transition-colors"
+              onClick={() => setShowVoiceRecorder(true)}
+              title="语音消息"
+            >
+              <Mic className="w-5 h-5 text-gray-500" />
+            </button>
             <div className="relative">
               <button
                 className="p-1.5 hover:bg-black/5 rounded transition-colors"
@@ -1031,6 +1138,50 @@ export default function ChatWindowOptimized({ friend, onClose: _onClose, isGroup
           currentUserRole={currentUserRole}
           onClose={() => setShowAnnouncement(false)}
           onAnnouncementChanged={reloadLatestAnnouncement}
+        />
+      )}
+
+      {/* 转发弹窗 */}
+      {forwardingMsg && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-80 max-h-[70vh] flex flex-col">
+            <h3 className="text-lg font-semibold mb-4">转发到</h3>
+            <div className="flex-1 overflow-y-auto">
+              {forwardConversations.length === 0 ? (
+                <p className="text-center text-gray-500 py-4">没有可转发的会话</p>
+              ) : (
+                forwardConversations.map((conv: any) => (
+                  <button
+                    key={conv.id}
+                    onClick={async () => {
+                      try {
+                        await messageApi.forwardMessage(forwardingMsg.id, [conv.id]);
+                        alert('已转发');
+                        setForwardingMsg(null);
+                      } catch (error: any) {
+                        alert(error.response?.data?.message || '转发失败');
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded"
+                  >
+                    <div className="w-8 h-8 rounded bg-blue-500 flex items-center justify-center text-white text-xs shrink-0">
+                      {conv.name?.slice(0, 2) || '?'}
+                    </div>
+                    <span className="text-sm truncate">{conv.name || '未命名'}</span>
+                  </button>
+                ))
+              )}
+            </div>
+            <button onClick={() => setForwardingMsg(null)} className="mt-4 w-full py-2 bg-gray-100 rounded hover:bg-gray-200">取消</button>
+          </div>
+        </div>
+      )}
+
+      {/* 语音录制器 */}
+      {showVoiceRecorder && (
+        <VoiceRecorder
+          onSend={handleVoiceSend}
+          onCancel={() => setShowVoiceRecorder(false)}
         />
       )}
     </div>

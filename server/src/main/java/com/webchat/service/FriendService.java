@@ -6,6 +6,8 @@ import com.webchat.dto.UserDTO;
 import com.webchat.entity.FriendRequest;
 import com.webchat.entity.Friendship;
 import com.webchat.entity.User;
+import com.webchat.entity.Blacklist;
+import com.webchat.repository.BlacklistRepository;
 import com.webchat.repository.FriendRequestRepository;
 import com.webchat.repository.FriendshipRepository;
 import com.webchat.repository.UserRepository;
@@ -28,6 +30,9 @@ public class FriendService {
 
     @Autowired
     private FriendshipRepository friendshipRepository;
+
+    @Autowired
+    private BlacklistRepository blacklistRepository;
 
     public UserDTO searchUser(SearchUserRequest request) {
         User user;
@@ -147,5 +152,89 @@ public class FriendService {
             UserDTO fromUserDTO = UserDTO.fromEntity(fromUser);
             return FriendRequestDTO.fromEntity(request, fromUserDTO);
         }).collect(Collectors.toList());
+    }
+
+    // ===== 好友备注 =====
+
+    @Transactional
+    public void updateRemark(Long userId, Long friendId, String remark) {
+        Friendship friendship = friendshipRepository.findByUserIdAndFriendId(userId, friendId)
+                .orElseThrow(() -> new RuntimeException("好友关系不存在"));
+        friendship.setRemark(remark);
+        friendshipRepository.save(friendship);
+    }
+
+    public List<Map<String, Object>> getFriendListWithRemark(Long userId) {
+        List<Friendship> friendships = friendshipRepository.findByUserId(userId);
+        List<Long> friendIds = friendships.stream()
+                .map(Friendship::getFriendId)
+                .collect(Collectors.toList());
+
+        Map<Long, String> remarkMap = friendships.stream()
+                .collect(Collectors.toMap(Friendship::getFriendId, f -> f.getRemark() != null ? f.getRemark() : ""));
+
+        return userRepository.findAllById(friendIds).stream()
+                .filter(user -> !user.getDeleted())
+                .map(user -> {
+                    Map<String, Object> data = new java.util.HashMap<>();
+                    data.put("id", user.getId());
+                    data.put("username", user.getUsername());
+                    data.put("studentId", user.getStudentId());
+                    data.put("avatarUrl", user.getAvatarUrl());
+                    data.put("remark", remarkMap.getOrDefault(user.getId(), ""));
+                    return data;
+                })
+                .collect(Collectors.toList());
+    }
+
+    // ===== 删除好友 =====
+
+    @Transactional
+    public void deleteFriend(Long userId, Long friendId) {
+        if (!friendshipRepository.existsByUserIdAndFriendId(userId, friendId)) {
+            throw new RuntimeException("好友关系不存在");
+        }
+        friendshipRepository.deleteByUserIdAndFriendId(userId, friendId);
+        friendshipRepository.deleteByUserIdAndFriendId(friendId, userId);
+    }
+
+    // ===== 黑名单 =====
+
+    @Transactional
+    public void blockUser(Long userId, Long blockedUserId) {
+        if (userId.equals(blockedUserId)) {
+            throw new RuntimeException("不能拉黑自己");
+        }
+        if (blacklistRepository.existsByUserIdAndBlockedUserId(userId, blockedUserId)) {
+            throw new RuntimeException("已在黑名单中");
+        }
+        Blacklist blacklist = new Blacklist();
+        blacklist.setUserId(userId);
+        blacklist.setBlockedUserId(blockedUserId);
+        blacklistRepository.save(blacklist);
+
+        // 同时删除好友关系
+        friendshipRepository.findByUserIdAndFriendId(userId, blockedUserId)
+                .ifPresent(f -> {
+                    friendshipRepository.deleteByUserIdAndFriendId(userId, blockedUserId);
+                    friendshipRepository.deleteByUserIdAndFriendId(blockedUserId, userId);
+                });
+    }
+
+    @Transactional
+    public void unblockUser(Long userId, Long blockedUserId) {
+        blacklistRepository.deleteByUserIdAndBlockedUserId(userId, blockedUserId);
+    }
+
+    public List<UserDTO> getBlacklist(Long userId) {
+        List<Blacklist> blacklist = blacklistRepository.findByUserId(userId);
+        List<Long> blockedIds = blacklist.stream().map(Blacklist::getBlockedUserId).toList();
+        return userRepository.findAllById(blockedIds).stream()
+                .map(UserDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    public boolean isBlocked(Long userId, Long targetUserId) {
+        return blacklistRepository.existsByUserIdAndBlockedUserId(userId, targetUserId);
     }
 }

@@ -42,7 +42,7 @@ export default function GroupInfo({
   const [loading, setLoading] = useState(false);
   const [friends, setFriends] = useState<UserInfo[]>([]);
   const [selectedFriends, setSelectedFriends] = useState<Set<number>>(new Set());
-  const [groupSettings, setGroupSettings] = useState({ allowMemberAddFriend: false, allowMemberViewProfile: false });
+  const [groupSettings, setGroupSettings] = useState({ allowMemberAddFriend: false, allowMemberViewProfile: false, muteAll: false });
 
   const isAdmin = currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
   const isOwner = currentUserRole === 'OWNER';
@@ -212,6 +212,19 @@ export default function GroupInfo({
       setGroupSettings(prev => ({ ...prev, [field]: value }));
     } catch (error: any) {
       alert('更新群设置失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleMuteAll = async () => {
+    setLoading(true);
+    try {
+      const newValue = !groupSettings.muteAll;
+      await groupApi.muteAll(conversationId, newValue);
+      setGroupSettings(prev => ({ ...prev, muteAll: newValue }));
+    } catch (error: any) {
+      alert('操作失败: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
     }
@@ -387,6 +400,22 @@ export default function GroupInfo({
                       className="sr-only peer"
                     />
                     <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">全员禁言</p>
+                    <p className="text-xs text-gray-500 mt-1">开启后，只有群主和管理员可以发言</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer ml-3">
+                    <input
+                      type="checkbox"
+                      checked={groupSettings.muteAll}
+                      onChange={handleToggleMuteAll}
+                      disabled={loading}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
                   </label>
                 </div>
               </div>

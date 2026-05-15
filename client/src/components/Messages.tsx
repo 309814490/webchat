@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, memo, useMemo } from 'react';
-import { Search, Plus, Users, Pin } from 'lucide-react';
+import { Search, Plus, Users, Pin, BellOff, Trash2 } from 'lucide-react';
 import AddFriend from './AddFriend';
 import CreateGroup from './CreateGroup';
 import GlobalSearch from './GlobalSearch';
@@ -64,6 +64,7 @@ const ConversationItem = memo(({ conv, displayName, onClick, onContextMenu }: {
           <span className="font-normal text-[15px] text-gray-900">{displayName}</span>
           <div className="flex items-center gap-1">
             {conv.pinned && <Pin className="w-3 h-3 text-gray-400" />}
+            {conv.muted && <BellOff className="w-3 h-3 text-gray-400" />}
             <span className="text-xs text-gray-400">{formatTime(conv.lastMessageTime)}</span>
           </div>
         </div>
@@ -135,12 +136,10 @@ export default function Messages({ onOpenChat, onOpenFriendChat, onOpenGroupChat
   const handleTogglePin = useCallback(async (conv: ConversationInfo) => {
     try {
       const newPinned = !conv.pinned;
-      // 乐观更新：立即更新本地状态
       setConversations(prevConvs => {
         const updated = prevConvs.map(c =>
           c.id === conv.id ? { ...c, pinned: newPinned } : c
         );
-        // 排序：置顶的在前，然后按 lastMessageTime 降序
         updated.sort((a, b) => {
           if (a.pinned && !b.pinned) return -1;
           if (!a.pinned && b.pinned) return 1;
@@ -157,7 +156,37 @@ export default function Messages({ onOpenChat, onOpenFriendChat, onOpenGroupChat
       }
     } catch (error) {
       console.error('Failed to toggle pin:', error);
-      // 失败时回滚
+      const response = await conversationApi.getUserConversations();
+      setConversations(response.data);
+    }
+    setContextMenu(null);
+  }, []);
+
+  const handleToggleMute = useCallback(async (conv: ConversationInfo) => {
+    try {
+      const newMuted = !conv.muted;
+      setConversations(prevConvs =>
+        prevConvs.map(c => c.id === conv.id ? { ...c, muted: newMuted } : c)
+      );
+      if (newMuted) {
+        await conversationApi.muteConversation(conv.id);
+      } else {
+        await conversationApi.unmuteConversation(conv.id);
+      }
+    } catch (error) {
+      console.error('Failed to toggle mute:', error);
+      const response = await conversationApi.getUserConversations();
+      setConversations(response.data);
+    }
+    setContextMenu(null);
+  }, []);
+
+  const handleHideConversation = useCallback(async (conv: ConversationInfo) => {
+    try {
+      setConversations(prevConvs => prevConvs.filter(c => c.id !== conv.id));
+      await conversationApi.hideConversation(conv.id);
+    } catch (error) {
+      console.error('Failed to hide conversation:', error);
       const response = await conversationApi.getUserConversations();
       setConversations(response.data);
     }
@@ -252,6 +281,20 @@ export default function Messages({ onOpenChat, onOpenFriendChat, onOpenGroupChat
           >
             <Pin className="w-4 h-4" />
             {contextMenu.conv.pinned ? '取消置顶' : '置顶'}
+          </button>
+          <button
+            onClick={() => handleToggleMute(contextMenu.conv)}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+          >
+            <BellOff className="w-4 h-4" />
+            {contextMenu.conv.muted ? '取消免打扰' : '消息免打扰'}
+          </button>
+          <button
+            onClick={() => handleHideConversation(contextMenu.conv)}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-red-500"
+          >
+            <Trash2 className="w-4 h-4" />
+            删除会话
           </button>
         </div>
       )}
