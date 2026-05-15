@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { QrCode, LogOut, X, User, Bell } from 'lucide-react';
+import { QrCode, LogOut, X, User, Bell, Smartphone } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuthStore } from '../stores/authStore';
 import NotificationSettings from './NotificationSettings';
+import DeviceManager from './DeviceManager';
 
 interface Props {
   onOpenProfileEdit?: () => void;
@@ -12,6 +13,7 @@ export default function Profile({ onOpenProfileEdit }: Props) {
   const { user, logout } = useAuthStore();
   const [showQrCode, setShowQrCode] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [showDeviceManager, setShowDeviceManager] = useState(false);
 
   // 生成二维码内容：包含用户信息，方便他人扫码添加好友
   const qrCodeValue = JSON.stringify({
@@ -66,12 +68,21 @@ export default function Profile({ onOpenProfileEdit }: Props) {
           </button>
           <button
             onClick={() => setShowNotificationSettings(true)}
-            className="w-full px-4 py-4 flex items-center gap-3 hover:bg-gray-50"
+            className="w-full px-4 py-4 flex items-center gap-3 hover:bg-gray-50 border-b border-gray-100"
           >
             <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
               <Bell className="w-5 h-5 text-white" />
             </div>
             <span className="text-gray-900 font-medium">通知设置</span>
+          </button>
+          <button
+            onClick={() => setShowDeviceManager(true)}
+            className="w-full px-4 py-4 flex items-center gap-3 hover:bg-gray-50"
+          >
+            <div className="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center">
+              <Smartphone className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-gray-900 font-medium">设备管理</span>
           </button>
         </div>
 
@@ -119,6 +130,11 @@ export default function Profile({ onOpenProfileEdit }: Props) {
       {/* Notification Settings Modal */}
       {showNotificationSettings && (
         <NotificationSettings onClose={() => setShowNotificationSettings(false)} />
+      )}
+
+      {/* Device Manager Modal */}
+      {showDeviceManager && (
+        <DeviceManager onClose={() => setShowDeviceManager(false)} />
       )}
     </div>
   );
